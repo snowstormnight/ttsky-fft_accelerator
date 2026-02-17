@@ -1,0 +1,3 @@
+max_abs_error=3.18298340e-02
+rmse=1.38126299e-03
+pass=1
