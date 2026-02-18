@@ -57,6 +57,10 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
     __Vfunc_fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__sat16__9__x = 0;
     CData/*7:0*/ __Vtableidx1;
     __Vtableidx1 = 0;
+    CData/*0:0*/ __Vdly__fft2d_core__DOT__perf_active;
+    __Vdly__fft2d_core__DOT__perf_active = 0;
+    QData/*63:0*/ __Vdly__fft2d_core__DOT__perf_counter;
+    __Vdly__fft2d_core__DOT__perf_counter = 0;
     CData/*2:0*/ __Vdly__fft2d_core__DOT__state;
     __Vdly__fft2d_core__DOT__state = 0;
     SData/*15:0*/ __Vdly__fft2d_core__DOT__out_ptr;
@@ -166,6 +170,8 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
         = vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j;
     __Vdly__fft2d_core__DOT__load_ptr = vlSelf->fft2d_core__DOT__load_ptr;
     __Vdly__fft2d_core__DOT__recv_cnt = vlSelf->fft2d_core__DOT__recv_cnt;
+    __Vdly__fft2d_core__DOT__perf_counter = vlSelf->fft2d_core__DOT__perf_counter;
+    __Vdly__fft2d_core__DOT__perf_active = vlSelf->fft2d_core__DOT__perf_active;
     __Vdly__fft2d_core__DOT__row_idx = vlSelf->fft2d_core__DOT__row_idx;
     __Vdly__fft2d_core__DOT__feed_cnt = vlSelf->fft2d_core__DOT__feed_cnt;
     __Vdly__fft2d_core__DOT__out_ptr = vlSelf->fft2d_core__DOT__out_ptr;
@@ -183,12 +189,95 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
     __Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 = 0U;
     __Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 = 0U;
     if (vlSelf->rst_n) {
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start = 0U;
+        if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done) {
+            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_re;
+            __Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 = 1U;
+            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a;
+            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_im;
+            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a;
+            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_b_re;
+            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b;
+            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_b_im;
+            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1 
+                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b;
+        }
+        if ((0U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
+            if (((IData)(vlSelf->fft2d_core__DOT__f_in_valid) 
+                 & (IData)(vlSelf->fft2d_core__DOT__f_in_ready))) {
+                __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 
+                    = vlSelf->fft2d_core__DOT__f_in_re;
+                __Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 = 1U;
+                __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 
+                    = vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr;
+                __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2 
+                    = vlSelf->fft2d_core__DOT__f_in_im;
+                __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2 
+                    = vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr;
+                if ((0xffU == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr))) {
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr = 0U;
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start = 1U;
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 1U;
+                } else {
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr 
+                        = (0xffU & ((IData)(1U) + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr)));
+                }
+            }
+        } else if ((1U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
+            if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done) {
+                __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr = 0U;
+                __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 2U;
+            }
+        } else if ((2U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
+            if (((IData)(vlSelf->fft2d_core__DOT__f_out_valid) 
+                 & (IData)(vlSelf->fft2d_core__DOT__f_out_ready))) {
+                if ((0xffU == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr))) {
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr = 0U;
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 0U;
+                } else {
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr 
+                        = (0xffU & ((IData)(1U) + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr)));
+                }
+            }
+        } else {
+            __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 0U;
+        }
+    } else {
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start = 0U;
+    }
+    if (vlSelf->rst_n) {
+        vlSelf->perf_done = 0U;
+        if ((((((~ (IData)(vlSelf->fft2d_core__DOT__perf_active)) 
+                & (0U == (IData)(vlSelf->fft2d_core__DOT__state))) 
+               & (IData)(vlSelf->in_valid)) & (IData)(vlSelf->in_ready)) 
+             & (0U == (IData)(vlSelf->fft2d_core__DOT__load_ptr)))) {
+            __Vdly__fft2d_core__DOT__perf_active = 1U;
+            __Vdly__fft2d_core__DOT__perf_counter = 1ULL;
+        } else if (vlSelf->fft2d_core__DOT__perf_active) {
+            __Vdly__fft2d_core__DOT__perf_counter = 
+                (1ULL + vlSelf->fft2d_core__DOT__perf_counter);
+        }
         if ((4U & (IData)(vlSelf->fft2d_core__DOT__state))) {
             if ((2U & (IData)(vlSelf->fft2d_core__DOT__state))) {
                 __Vdly__fft2d_core__DOT__state = 0U;
             } else if ((1U & (IData)(vlSelf->fft2d_core__DOT__state))) {
                 if (((IData)(vlSelf->out_valid) & (IData)(vlSelf->out_ready))) {
                     if ((0xffffU == (IData)(vlSelf->fft2d_core__DOT__out_ptr))) {
+                        if (vlSelf->fft2d_core__DOT__perf_active) {
+                            vlSelf->perf_done = 1U;
+                            vlSelf->perf_cycles = vlSelf->fft2d_core__DOT__perf_counter;
+                            __Vdly__fft2d_core__DOT__perf_active = 0U;
+                        }
                         __Vdly__fft2d_core__DOT__out_ptr = 0U;
                         __Vdly__fft2d_core__DOT__state = 0U;
                     } else {
@@ -342,9 +431,36 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
         __Vdly__fft2d_core__DOT__feed_cnt = 0U;
         __Vdly__fft2d_core__DOT__recv_cnt = 0U;
         __Vdly__fft2d_core__DOT__out_ptr = 0U;
+        vlSelf->perf_done = 0U;
+        vlSelf->perf_cycles = 0ULL;
+        __Vdly__fft2d_core__DOT__perf_active = 0U;
+        __Vdly__fft2d_core__DOT__perf_counter = 0ULL;
     }
+    vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr 
+        = __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr;
+    vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr 
+        = __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr;
+    if (__Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0) {
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0] 
+            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0;
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1] 
+            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1;
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0] 
+            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0;
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1] 
+            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1;
+    }
+    if (__Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2) {
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2] 
+            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2;
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2] 
+            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2;
+    }
+    vlSelf->fft2d_core__DOT__perf_active = __Vdly__fft2d_core__DOT__perf_active;
+    vlSelf->fft2d_core__DOT__perf_counter = __Vdly__fft2d_core__DOT__perf_counter;
     vlSelf->fft2d_core__DOT__recv_cnt = __Vdly__fft2d_core__DOT__recv_cnt;
     vlSelf->fft2d_core__DOT__load_ptr = __Vdly__fft2d_core__DOT__load_ptr;
+    vlSelf->fft2d_core__DOT__u_fft1d__DOT__state = __Vdly__fft2d_core__DOT__u_fft1d__DOT__state;
     vlSelf->fft2d_core__DOT__out_ptr = __Vdly__fft2d_core__DOT__out_ptr;
     vlSelf->fft2d_core__DOT__feed_cnt = __Vdly__fft2d_core__DOT__feed_cnt;
     vlSelf->fft2d_core__DOT__row_idx = __Vdly__fft2d_core__DOT__row_idx;
@@ -367,93 +483,19 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
         vlSelf->fft2d_core__DOT__mem0_re[__Vdlyvdim0__fft2d_core__DOT__mem0_re__v1] 
             = __Vdlyvval__fft2d_core__DOT__mem0_re__v1;
     }
-    if (vlSelf->rst_n) {
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start = 0U;
-        if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done) {
-            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_re;
-            __Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 = 1U;
-            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a;
-            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_im;
-            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a;
-            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_b_re;
-            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b;
-            __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_b_im;
-            __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1 
-                = vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b;
-        }
-        if ((0U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
-            if (((IData)(vlSelf->fft2d_core__DOT__f_in_valid) 
-                 & (IData)(vlSelf->fft2d_core__DOT__f_in_ready))) {
-                __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 
-                    = vlSelf->fft2d_core__DOT__f_in_re;
-                __Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 = 1U;
-                __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2 
-                    = vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr;
-                __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2 
-                    = vlSelf->fft2d_core__DOT__f_in_im;
-                __Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2 
-                    = vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr;
-                if ((0xffU == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr))) {
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr = 0U;
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start = 1U;
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 1U;
-                } else {
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr 
-                        = (0xffU & ((IData)(1U) + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr)));
-                }
-            }
-        } else if ((1U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
-            if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done) {
-                __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr = 0U;
-                __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 2U;
-            }
-        } else if ((2U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
-            if (((IData)(vlSelf->fft2d_core__DOT__f_out_valid) 
-                 & (IData)(vlSelf->fft2d_core__DOT__f_out_ready))) {
-                if ((0xffU == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr))) {
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr = 0U;
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 0U;
-                } else {
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr 
-                        = (0xffU & ((IData)(1U) + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr)));
-                }
-            }
-        } else {
-            __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 0U;
-        }
+    vlSelf->fft2d_core__DOT__f_in_ready = (0U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state));
+    if ((2U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
+        vlSelf->fft2d_core__DOT__f_out_valid = 1U;
+        vlSelf->fft2d_core__DOT__f_out_re = 0U;
+        vlSelf->fft2d_core__DOT__f_out_im = 0U;
+        vlSelf->fft2d_core__DOT__f_out_re = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re
+            [vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr];
+        vlSelf->fft2d_core__DOT__f_out_im = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im
+            [vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr];
     } else {
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__state = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start = 0U;
-    }
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr 
-        = __Vdly__fft2d_core__DOT__u_fft1d__DOT__load_ptr;
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr 
-        = __Vdly__fft2d_core__DOT__u_fft1d__DOT__out_ptr;
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__state = __Vdly__fft2d_core__DOT__u_fft1d__DOT__state;
-    if (__Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0) {
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0] 
-            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v0;
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1] 
-            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v1;
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0] 
-            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v0;
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1] 
-            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v1;
-    }
-    if (__Vdlyvset__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2) {
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2] 
-            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_im__v2;
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vdlyvdim0__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2] 
-            = __Vdlyvval__fft2d_core__DOT__u_fft1d__DOT__mem_re__v2;
+        vlSelf->fft2d_core__DOT__f_out_valid = 0U;
+        vlSelf->fft2d_core__DOT__f_out_re = 0U;
+        vlSelf->fft2d_core__DOT__f_out_im = 0U;
     }
     vlSelf->in_ready = (0U == (IData)(vlSelf->fft2d_core__DOT__state));
     vlSelf->out_valid = (5U == (IData)(vlSelf->fft2d_core__DOT__state));
@@ -463,6 +505,60 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
     vlSelf->fft2d_core__DOT__f_out_ready = 0U;
     vlSelf->out_re = 0U;
     vlSelf->out_im = 0U;
+    if (vlSelf->rst_n) {
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__bfly_start = 0U;
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = 0U;
+        if (((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_start) 
+             & (~ (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running)))) {
+            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = 1U;
+            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 0U;
+            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage = 0U;
+            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = 0U;
+            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = 0U;
+        } else if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running) {
+            if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting) {
+                if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done) {
+                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 0U;
+                    if (((0x1ffU & ((IData)(1U) + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j))) 
+                         < (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half))) {
+                        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j 
+                            = (0xffU & ((IData)(1U) 
+                                        + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j)));
+                    } else {
+                        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = 0U;
+                        if ((0x100U > (0x1ffU & ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base) 
+                                                 + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span))))) {
+                            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base 
+                                = (0xffU & ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base) 
+                                            + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span)));
+                        } else {
+                            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = 0U;
+                            if ((8U > (0xfU & ((IData)(1U) 
+                                               + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage))))) {
+                                __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage 
+                                    = (7U & ((IData)(1U) 
+                                             + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage)));
+                            } else {
+                                __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = 0U;
+                                vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = 1U;
+                            }
+                        }
+                    }
+                }
+            } else {
+                __Vdly__fft2d_core__DOT__u_fft1d__DOT__bfly_start = 1U;
+                __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 1U;
+            }
+        }
+    } else {
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = 0U;
+        __Vdly__fft2d_core__DOT__u_fft1d__DOT__bfly_start = 0U;
+        vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = 0U;
+    }
     if ((4U & (IData)(vlSelf->fft2d_core__DOT__state))) {
         if ((1U & (~ ((IData)(vlSelf->fft2d_core__DOT__state) 
                       >> 1U)))) {
@@ -525,50 +621,6 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
             }(), (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__Vfuncout))];
     }
     if (vlSelf->rst_n) {
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__bfly_start = 0U;
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = 0U;
-        if (((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_start) 
-             & (~ (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running)))) {
-            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = 1U;
-            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 0U;
-            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage = 0U;
-            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = 0U;
-            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = 0U;
-        } else if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running) {
-            if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting) {
-                if (vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done) {
-                    __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 0U;
-                    if (((0x1ffU & ((IData)(1U) + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j))) 
-                         < (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half))) {
-                        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j 
-                            = (0xffU & ((IData)(1U) 
-                                        + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j)));
-                    } else {
-                        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = 0U;
-                        if ((0x100U > (0x1ffU & ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base) 
-                                                 + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span))))) {
-                            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base 
-                                = (0xffU & ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base) 
-                                            + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span)));
-                        } else {
-                            __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = 0U;
-                            if ((8U > (0xfU & ((IData)(1U) 
-                                               + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage))))) {
-                                __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage 
-                                    = (7U & ((IData)(1U) 
-                                             + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage)));
-                            } else {
-                                __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = 0U;
-                                vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = 1U;
-                            }
-                        }
-                    }
-                }
-            } else {
-                __Vdly__fft2d_core__DOT__u_fft1d__DOT__bfly_start = 1U;
-                __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 1U;
-            }
-        }
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done = 0U;
         if ((4U & (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state))) {
             if ((2U & (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state))) {
@@ -673,13 +725,6 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
             __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state = 1U;
         }
     } else {
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = 0U;
-        __Vdly__fft2d_core__DOT__u_fft1d__DOT__bfly_start = 0U;
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = 0U;
         __Vdly__fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state = 0U;
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done = 0U;
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_re = 0U;
@@ -695,20 +740,6 @@ VL_INLINE_OPT void Vfft2d_core___024root___nba_sequent__TOP__0(Vfft2d_core___024
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m1_r = 0U;
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m2_r = 0U;
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m3_r = 0U;
-    }
-    vlSelf->fft2d_core__DOT__f_in_ready = (0U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state));
-    if ((2U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
-        vlSelf->fft2d_core__DOT__f_out_valid = 1U;
-        vlSelf->fft2d_core__DOT__f_out_im = 0U;
-        vlSelf->fft2d_core__DOT__f_out_re = 0U;
-        vlSelf->fft2d_core__DOT__f_out_im = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im
-            [vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr];
-        vlSelf->fft2d_core__DOT__f_out_re = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re
-            [vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr];
-    } else {
-        vlSelf->fft2d_core__DOT__f_out_valid = 0U;
-        vlSelf->fft2d_core__DOT__f_out_im = 0U;
-        vlSelf->fft2d_core__DOT__f_out_re = 0U;
     }
     vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_start 
         = __Vdly__fft2d_core__DOT__u_fft1d__DOT__ctrl_start;

@@ -1,13 +1,32 @@
 `default_nettype none
 
-// Radix-2 DIF butterfly with per-stage scaling (right shift by 1).
-// Uses one time-shared 16x16 multiplier over 4 cycles.
-// Outputs:
-//   out_a = (a + b)/2
-//   out_b = ((a - b)/2) * W
+// -----------------------------------------------------------------------------
+// Module: butterfly
+// -----------------------------------------------------------------------------
+// Purpose:
+// - Compute one radix-2 DIF butterfly operation on complex Q1.15 inputs.
+// - Architecture is area-first: one 16x16 multiplier is reused over time.
 //
-// This module is intentionally serialized for area efficiency:
-// one real multiplier is reused over four micro-steps (S_M1..S_M4).
+// Math implemented:
+//   sum  = (a + b) / 2
+//   diff = (a - b) / 2
+//   out_a = sum
+//   out_b = diff * W
+// where W is twiddle factor (cos/sin) in Q1.15.
+//
+// Scaling policy:
+// - "divide by 2" per stage via arithmetic right shift by 1.
+// - This avoids overflow growth through FFT stages.
+//
+// Timing model:
+// - start pulse accepted in S_IDLE.
+// - module runs 4 internal multiply steps (S_M1..S_M4).
+// - done pulses for one cycle when outputs become valid.
+//
+// Notes on synthesizability:
+// - no real/dynamic types; all fixed-width logic.
+// - no latches (all combinational defaults are assigned).
+// -----------------------------------------------------------------------------
 module butterfly (
     input  logic                    clk,
     input  logic                    rst_n,
@@ -26,15 +45,24 @@ module butterfly (
     output logic signed [15:0]      out_b_im
 );
 
+  // Short alias for Q1.15 signed sample type.
   typedef logic signed [15:0] q15_t;
-  // Micro-FSM for time-sharing the single multiplier.
+
+  // Micro-FSM controlling multiplier reuse:
+  // S_M1..S_M4 each compute one real product required for complex multiply.
   typedef enum logic [2:0] {S_IDLE, S_M1, S_M2, S_M3, S_M4} state_t;
   state_t state;
 
+  // Registered precompute terms from a and b.
+  // sum_* drives out_a directly; diff_* is multiplied by twiddle.
   logic signed [15:0] sum_re_r, sum_im_r, diff_re_r, diff_im_r;
+  // Registered twiddle to keep data stable during multicycle operation.
   logic signed [15:0] w_re_r, w_im_r;
+  // Registers holding first 3 multiplier results while last one is computed.
   logic signed [31:0] m1_r, m2_r, m3_r;
+  // Shared multiplier inputs selected by state.
   logic signed [15:0] mul_a, mul_b;
+  // Shared multiplier output.
   logic signed [31:0] mul_p;
 
   function automatic logic signed [15:0] sat16(input logic signed [31:0] x);
@@ -46,7 +74,10 @@ module butterfly (
 
   always_comb begin
     // Reuse one real multiplier across 4 products:
-    // 1) diff_re*w_re, 2) diff_im*w_im, 3) diff_re*w_im, 4) diff_im*w_re
+    // 1) dr*wr, 2) di*wi, 3) dr*wi, 4) di*wr
+    // Later assembled into:
+    // re = dr*wr - di*wi
+    // im = dr*wi + di*wr
     mul_a = '0;
     mul_b = '0;
     unique case (state)
@@ -58,7 +89,9 @@ module butterfly (
     endcase
   end
 
+  // Single hardware multiplier.
   assign mul_p = mul_a * mul_b;
+  // busy is high whenever operation is in flight.
   assign busy  = (state != S_IDLE);
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -79,6 +112,7 @@ module butterfly (
       m2_r      <= '0;
       m3_r      <= '0;
     end else begin
+      // done is a pulse, so clear every cycle unless set in S_M4.
       done <= 1'b0;
       unique case (state)
         S_IDLE: begin
@@ -90,21 +124,26 @@ module butterfly (
             diff_im_r <= q15_t'(($signed({a_im[15], a_im}) - $signed({b_im[15], b_im})) >>> 1);
             w_re_r    <= w_re;
             w_im_r    <= w_im;
+            // Move into multiply sequence.
             state     <= S_M1;
           end
         end
+        // Capture product #1 (dr*wr).
         S_M1: begin
           m1_r  <= mul_p;
           state <= S_M2;
         end
+        // Capture product #2 (di*wi).
         S_M2: begin
           m2_r  <= mul_p;
           state <= S_M3;
         end
+        // Capture product #3 (dr*wi).
         S_M3: begin
           m3_r  <= mul_p;
           state <= S_M4;
         end
+        // Product #4 (di*wr) is available on mul_p now.
         S_M4: begin
           // Complex multiply assembly:
           // (dr+jdi)*(wr+jwi) = (dr*wr - di*wi) + j(dr*wi + di*wr)

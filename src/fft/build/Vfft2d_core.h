@@ -30,10 +30,12 @@ class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core VL_NOT_FINAL : public VerilatedMo
     VL_OUT8(&in_ready,0,0);
     VL_OUT8(&out_valid,0,0);
     VL_IN8(&out_ready,0,0);
+    VL_OUT8(&perf_done,0,0);
     VL_IN16(&in_re,15,0);
     VL_IN16(&in_im,15,0);
     VL_OUT16(&out_re,15,0);
     VL_OUT16(&out_im,15,0);
+    VL_OUT64(&perf_cycles,63,0);
 
     // CELLS
     // Public to allow access to /* verilator public */ items.

@@ -1,7 +1,21 @@
 `default_nettype none
 
-// Q1.15 twiddles for W32^k = exp(-j*2*pi*k/32), k = 0..15.
-// Implemented as combinational ROM using case statement (synthesizable).
+// -----------------------------------------------------------------------------
+// Module: twiddle_rom
+// -----------------------------------------------------------------------------
+// Purpose:
+// - Lookup twiddle coefficients for FFT butterflies in Q1.15 fixed-point.
+//
+// Definition:
+// - W_N^k = exp(-j*2*pi*k/N) = cos(2*pi*k/N) - j*sin(2*pi*k/N)
+// - w_re = Re{W_N^k}, w_im = Im{W_N^k}
+//
+// Implementation notes:
+// - Combinational case ROM (synthesizable).
+// - This static file contains values for N=32 schedule (k=0..15).
+// - For other N (e.g., 256), the Python flow auto-generates
+//   build/SV_twiddle_rom_auto.sv and compiles that instead.
+// -----------------------------------------------------------------------------
 module twiddle_rom #(
     parameter int LOGN = 5
 ) (
@@ -11,6 +25,7 @@ module twiddle_rom #(
 );
 
   always_comb begin
+    // idx selects twiddle k.
     unique case (idx)
       5'd0:  begin w_re = 16'sd32767;  w_im = 16'sd0;      end
       5'd1:  begin w_re = 16'sd32138;  w_im = -16'sd6393;  end

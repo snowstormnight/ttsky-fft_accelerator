@@ -22,6 +22,7 @@ class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core___024root final : public Verilate
         VL_OUT8(in_ready,0,0);
         VL_OUT8(out_valid,0,0);
         VL_IN8(out_ready,0,0);
+        VL_OUT8(perf_done,0,0);
         CData/*2:0*/ fft2d_core__DOT__state;
         CData/*7:0*/ fft2d_core__DOT__row_idx;
         CData/*7:0*/ fft2d_core__DOT__col_idx;
@@ -31,6 +32,7 @@ class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core___024root final : public Verilate
         CData/*0:0*/ fft2d_core__DOT__f_in_ready;
         CData/*0:0*/ fft2d_core__DOT__f_out_valid;
         CData/*0:0*/ fft2d_core__DOT__f_out_ready;
+        CData/*0:0*/ fft2d_core__DOT__perf_active;
         CData/*1:0*/ fft2d_core__DOT__u_fft1d__DOT__state;
         CData/*7:0*/ fft2d_core__DOT__u_fft1d__DOT__load_ptr;
         CData/*7:0*/ fft2d_core__DOT__u_fft1d__DOT__out_ptr;
@@ -78,10 +80,10 @@ class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core___024root final : public Verilate
         SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__b_re;
         SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__a_im;
         SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__a_re;
-        SData/*8:0*/ fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span;
-        SData/*8:0*/ fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half;
     };
     struct {
+        SData/*8:0*/ fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span;
+        SData/*8:0*/ fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half;
         SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__sum_re_r;
         SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__sum_im_r;
         SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_re_r;
@@ -97,6 +99,8 @@ class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core___024root final : public Verilate
         IData/*31:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m3_r;
         IData/*31:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_p;
         IData/*31:0*/ __VactIterCount;
+        VL_OUT64(perf_cycles,63,0);
+        QData/*63:0*/ fft2d_core__DOT__perf_counter;
         VlUnpacked<SData/*15:0*/, 65536> fft2d_core__DOT__mem0_re;
         VlUnpacked<SData/*15:0*/, 65536> fft2d_core__DOT__mem0_im;
         VlUnpacked<SData/*15:0*/, 65536> fft2d_core__DOT__mem1_re;

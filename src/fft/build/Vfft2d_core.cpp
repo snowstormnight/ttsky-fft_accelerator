@@ -15,10 +15,12 @@ Vfft2d_core::Vfft2d_core(VerilatedContext* _vcontextp__, const char* _vcname__)
     , in_ready{vlSymsp->TOP.in_ready}
     , out_valid{vlSymsp->TOP.out_valid}
     , out_ready{vlSymsp->TOP.out_ready}
+    , perf_done{vlSymsp->TOP.perf_done}
     , in_re{vlSymsp->TOP.in_re}
     , in_im{vlSymsp->TOP.in_im}
     , out_re{vlSymsp->TOP.out_re}
     , out_im{vlSymsp->TOP.out_im}
+    , perf_cycles{vlSymsp->TOP.perf_cycles}
     , rootp{&(vlSymsp->TOP)}
 {
     // Register model with the context

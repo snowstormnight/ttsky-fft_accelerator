@@ -2,3 +2,4 @@ size=256
 max_abs_error=1.94171143e+00
 rmse=9.48379122e-03
 pass=0
+perf_cycles=4064255

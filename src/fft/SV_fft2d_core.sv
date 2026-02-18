@@ -1,19 +1,33 @@
 `default_nettype none
 
-// 2D FFT core using ONE reused 1D FFT core (area-efficient architecture).
+// -----------------------------------------------------------------------------
+// Module: fft2d_core
+// -----------------------------------------------------------------------------
+// Purpose:
+// - Compute one NxN complex 2D FFT by reusing a single 1D FFT core.
+// - This is area-oriented (iterative), not throughput-maximal.
 //
-// Big picture:
-// 1) Load one full image tile (N x N) into mem0.
-// 2) Run 1D FFT on each row  -> write to mem1.
-// 3) Run 1D FFT on each col  -> write back to mem0.
-// 4) Drain mem0 as final 2D FFT output.
+// Processing sequence per image tile:
+// 1) ST_LOAD     : accept N*N input samples (row-major) into mem0.
+// 2) ST_ROW_*    : run 1D FFT on each row:  mem0 -> fft1d -> mem1.
+// 3) ST_COL_*    : run 1D FFT on each col:  mem1 -> fft1d -> mem0.
+// 4) ST_DRAIN    : stream N*N output bins from mem0.
 //
-// Input order:
-// - natural raster (row-major): pixel0, pixel1, ...
+// External protocol:
+// - in_ready  high only during ST_LOAD.
+// - out_valid high only during ST_DRAIN.
+// - one sample per cycle when valid && ready handshake succeeds.
 //
-// Output order:
-// - bit-reversed on both axes (because 1D DIF FFT output is bit-reversed).
-// - software can convert to natural order for analysis/IFFT.
+// Ordering:
+// - Input expected in natural raster row-major order.
+// - Output is bit-reversed on both dimensions (due to DIF 1D kernel).
+// - Software can reorder back to natural.
+//
+// Performance counters:
+// - perf_done   pulses for one cycle at end of block.
+// - perf_cycles latches number of cycles from first accepted input sample
+//   to final accepted output sample for that block.
+// -----------------------------------------------------------------------------
 module fft2d_core #(
     parameter int N    = 32,
     parameter int LOGN = 5
@@ -27,12 +41,16 @@ module fft2d_core #(
     output logic                    out_valid,
     input  logic                    out_ready,
     output logic signed [15:0]      out_re,
-    output logic signed [15:0]      out_im
+    output logic signed [15:0]      out_im,
+    output logic                    perf_done,
+    output logic [63:0]             perf_cycles
 );
 
+  // Total samples in one 2D tile and address width for flattened storage.
   localparam int TOT = N * N;
   localparam int AW  = $clog2(TOT);
 
+  // Block controller states for whole 2D operation.
   typedef enum logic [2:0] {
     ST_LOAD, ST_ROW_FEED, ST_ROW_RECV, ST_COL_FEED, ST_COL_RECV, ST_DRAIN
   } state_t;
@@ -46,7 +64,13 @@ module fft2d_core #(
   logic signed [15:0] mem1_re [0:TOT-1];
   logic signed [15:0] mem1_im [0:TOT-1];
 
+  // row_idx : which row is being processed in row pass.
+  // col_idx : which column is being processed in column pass.
+  // feed_cnt: position currently fed into 1D core.
+  // recv_cnt: position currently received from 1D core.
   logic [LOGN-1:0] row_idx, col_idx, feed_cnt, recv_cnt;
+  // load_ptr: flattened write pointer while loading input tile.
+  // out_ptr : flattened read pointer while draining final output tile.
   logic [AW-1:0] out_ptr;
   logic [AW-1:0] load_ptr;
 
@@ -55,8 +79,12 @@ module fft2d_core #(
     idx2d = {r, c};
   endfunction
 
+  // Internal streaming signals connected to reused fft1d_core.
   logic                    f_in_valid, f_in_ready, f_out_valid, f_out_ready;
   logic signed [15:0]      f_in_re, f_in_im, f_out_re, f_out_im;
+  // perf_active gates counting; perf_counter accumulates cycle count.
+  logic                    perf_active;
+  logic [63:0]             perf_counter;
 
   fft1d_core #(.N(N), .LOGN(LOGN)) u_fft1d (
       .clk(clk),
@@ -78,6 +106,7 @@ module fft2d_core #(
   assign out_valid = (state == ST_DRAIN);
 
   always_comb begin
+    // Safe defaults avoid latch inference.
     f_in_valid  = 1'b0;
     f_in_re     = '0;
     f_in_im     = '0;
@@ -120,9 +149,23 @@ module fft2d_core #(
       feed_cnt  <= '0;
       recv_cnt  <= '0;
       out_ptr   <= '0;
+      perf_done <= 1'b0;
+      perf_cycles <= '0;
+      perf_active <= 1'b0;
+      perf_counter <= '0;
     end else begin
+      // perf_done is one-cycle pulse; clear by default.
+      perf_done <= 1'b0;
+      // Start counting on first accepted input sample of a block.
+      if (!perf_active && state == ST_LOAD && in_valid && in_ready && load_ptr == '0) begin
+        perf_active <= 1'b1;
+        perf_counter <= 64'd1;
+      end else if (perf_active) begin
+        perf_counter <= perf_counter + 64'd1;
+      end
+
       unique case (state)
-        // Load exactly N*N complex samples.
+        // Load full tile into mem0.
         ST_LOAD: begin
           if (in_valid && in_ready) begin
             mem0_re[load_ptr] <= in_re;
@@ -139,7 +182,7 @@ module fft2d_core #(
           end
         end
 
-        // Push one row into 1D core.
+        // Feed one row to 1D core (N samples).
         ST_ROW_FEED: begin
           if (f_in_valid && f_in_ready) begin
             if (feed_cnt == LOGN'(N - 1)) begin
@@ -152,7 +195,7 @@ module fft2d_core #(
           end
         end
 
-        // Collect one row result from 1D core.
+        // Receive one transformed row and store into mem1.
         ST_ROW_RECV: begin
           if (f_out_valid && f_out_ready) begin
             mem1_re[idx2d(row_idx, recv_cnt)] <= f_out_re;
@@ -175,7 +218,7 @@ module fft2d_core #(
           end
         end
 
-        // Push one column (from mem1) into 1D core.
+        // Feed one column from mem1 into 1D core.
         ST_COL_FEED: begin
           if (f_in_valid && f_in_ready) begin
             if (feed_cnt == LOGN'(N - 1)) begin
@@ -188,7 +231,7 @@ module fft2d_core #(
           end
         end
 
-        // Collect one column result and write final bins into mem0.
+        // Receive one transformed column and write final bins into mem0.
         ST_COL_RECV: begin
           if (f_out_valid && f_out_ready) begin
             mem0_re[idx2d(recv_cnt, col_idx)] <= f_out_re;
@@ -209,10 +252,16 @@ module fft2d_core #(
           end
         end
 
-        // Stream out final N*N bins.
+        // Drain final output tile.
         ST_DRAIN: begin
           if (out_valid && out_ready) begin
             if (out_ptr == AW'(TOT - 1)) begin
+              // End of block: latch cycle count for this image tile.
+              if (perf_active) begin
+                perf_done <= 1'b1;
+                perf_cycles <= perf_counter;
+                perf_active <= 1'b0;
+              end
               out_ptr <= '0;
               state   <= ST_LOAD;
             end else begin

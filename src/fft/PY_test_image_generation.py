@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+# End-to-end automation script for the FFT hardware pipeline.
+#
+# Per input image:
+# 1) Load grayscale image from ./image (or user path).
+# 2) Resize to square power-of-2 (nearest, capped by --max-n).
+# 3) Convert uint8 -> signed Q1.15 and write input_tile.txt (one int per line).
+# 4) Build Verilated hardware for that N if needed.
+# 5) Run C++ testbench: streams tile into SV FFT, writes dut_fft_out.txt.
+# 6) Read DUT complex FFT output, reorder from bit-reversed if requested.
+# 7) Reconstruct image with NumPy IFFT and compare against original normalized data.
+# 8) Save original/reconstructed/difference PNG plus metrics.txt.
+
 import argparse
 import math
 import subprocess
@@ -8,10 +20,13 @@ from pathlib import Path
 
 import numpy as np
 
+# Q1.15 scaling factor:
+#   float value ~= int_q15 / 32768
 Q = 32768.0
 
 
 def load_gray(path: Path) -> np.ndarray:
+    # Prefer OpenCV for speed/availability; fallback to PIL.
     try:
         import cv2  # type: ignore
         img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
@@ -24,6 +39,7 @@ def load_gray(path: Path) -> np.ndarray:
 
 
 def save_png(path: Path, img_u8: np.ndarray) -> None:
+    # Keep save path backend-agnostic (OpenCV first, PIL fallback).
     try:
         import cv2  # type: ignore
         cv2.imwrite(str(path), img_u8)
@@ -33,6 +49,7 @@ def save_png(path: Path, img_u8: np.ndarray) -> None:
 
 
 def resize_square(img: np.ndarray, n: int) -> np.ndarray:
+    # Resize to exactly NxN; area interpolation for downscale, linear for upscale.
     try:
         import cv2  # type: ignore
         out = cv2.resize(img, (n, n), interpolation=cv2.INTER_AREA if n < img.shape[0] else cv2.INTER_LINEAR)
@@ -43,6 +60,8 @@ def resize_square(img: np.ndarray, n: int) -> np.ndarray:
 
 
 def nearest_pow2(x: int) -> int:
+    # Return nearest power of two to x.
+    # Tie goes to lower power due to <= in comparison.
     if x <= 1:
         return 2
     lo = 1 << int(math.floor(math.log2(x)))
@@ -51,21 +70,28 @@ def nearest_pow2(x: int) -> int:
 
 
 def bitrev_indices(logn: int) -> np.ndarray:
+    # Build index map where position i maps to bit-reversed(i).
     return np.array([int(f"{i:0{logn}b}"[::-1], 2) for i in range(1 << logn)], dtype=np.int32)
 
 
 def bitrev2d_to_natural(x: np.ndarray) -> np.ndarray:
+    # Apply bit-reversal reorder on rows and columns.
+    # Used because current hardware outputs DIF order on both dimensions.
     n = x.shape[0]
     idx = bitrev_indices(int(math.log2(n)))
     return x[np.ix_(idx, idx)]
 
 
 def u8_to_q15(img_u8: np.ndarray) -> np.ndarray:
+    # Map uint8 [0..255] -> normalized float [-1, 1) via (u8-128)/128,
+    # then quantize to Q1.15 signed int16.
     x = np.clip((img_u8.astype(np.float64) - 128.0) / 128.0, -1.0, 0.999969)
     return np.clip(np.round(x * Q), -32768, 32767).astype(np.int16)
 
 
 def generate_twiddle_rom(path: Path, n: int) -> None:
+    # Auto-generate twiddle ROM source for current FFT size N.
+    # This avoids maintaining many static ROM files by hand.
     logn = int(math.log2(n))
     lines = [
         "`default_nettype none",
@@ -104,6 +130,8 @@ def generate_twiddle_rom(path: Path, n: int) -> None:
 
 
 def build_hw(repo_fft_dir: Path, n: int) -> Path:
+    # Build or reuse Verilated binary for requested N.
+    # Rebuild is triggered when previous fft_n.txt differs.
     logn = int(math.log2(n))
     build_dir = repo_fft_dir / "build"
     bin_path = build_dir / "Vfft2d_core"
@@ -123,6 +151,9 @@ def build_hw(repo_fft_dir: Path, n: int) -> Path:
     twiddle_auto = build_dir / "SV_twiddle_rom_auto.sv"
     generate_twiddle_rom(twiddle_auto, n)
 
+    # Verilator compile command:
+    # - Parameterize SV top with -GN/-GLOGN
+    # - Parameterize C++ with -DFFT_N/-DFFT_LOGN
     cmd = [
         "verilator",
         "-Wall",
@@ -154,12 +185,26 @@ def build_hw(repo_fft_dir: Path, n: int) -> Path:
 
 
 def parse_hw_fft(path: Path, n: int) -> np.ndarray:
+    # Parse DUT file with "re im" per line into complex64-like ndarray.
     raw = np.loadtxt(path, dtype=np.int64)
     if raw.ndim == 1:
         raw = raw.reshape(1, -1)
     if raw.shape != (n * n, 2):
         raise ValueError(f"bad DUT output shape {raw.shape}, expected {(n*n, 2)}")
     return (raw[:, 0].astype(np.float64) + 1j * raw[:, 1].astype(np.float64)).reshape(n, n) / Q
+
+
+def parse_perf_cycles(stdout: str) -> int | None:
+    # Parse machine-readable perf line emitted by C++:
+    #   PERF_CYCLES <integer>
+    for ln in stdout.splitlines():
+        parts = ln.strip().split()
+        if len(parts) == 2 and parts[0] == "PERF_CYCLES":
+            try:
+                return int(parts[1])
+            except ValueError:
+                return None
+    return None
 
 
 def process_image(
@@ -169,7 +214,13 @@ def process_image(
     tol_max: float,
     tol_rmse: float,
     max_n: int,
-) -> tuple[str, float, float, bool]:
+) -> tuple[str, float, float, bool, int | None]:
+    # ---- Input preparation ----
+    # img        : original uint8 grayscale image loaded from disk.
+    # n          : target FFT dimension after nearest power-of-2 + cap.
+    # img_n      : resized NxN uint8 tile.
+    # q          : int16 Q1.15 tile.
+    # x_ref      : normalized float tile used as comparison baseline.
     img = load_gray(img_path)
     n = nearest_pow2(max(img.shape[0], img.shape[1]))
     if n < 2:
@@ -184,20 +235,28 @@ def process_image(
     q = u8_to_q15(img_n)
     x_ref = q.astype(np.float64) / Q
 
+    # Case output directory name includes image stem and resolved N.
     case_dir = outdir / f"{img_path.stem}_N{n}"
     case_dir.mkdir(parents=True, exist_ok=True)
     in_txt = case_dir / "input_tile.txt"
     out_txt = case_dir / "dut_fft_out.txt"
     np.savetxt(in_txt, q.reshape(-1), fmt="%d")
 
-    subprocess.run([str(fft_bin), str(in_txt), str(out_txt)], check=True)
+    # Run hardware model:
+    # - input_tile.txt -> C++ -> SV FFT2D -> dut_fft_out.txt
+    # Capture stdout to extract perf counter line.
+    run = subprocess.run([str(fft_bin), str(in_txt), str(out_txt)], check=True, text=True, capture_output=True)
+    perf_cycles = parse_perf_cycles(run.stdout)
     f_hw = parse_hw_fft(out_txt, n)
     if order == "bitrev2d":
         f_hw = bitrev2d_to_natural(f_hw)
 
+    # Hardware has per-stage divide-by-2 scaling in both row and column passes.
+    # Net FFT scaling is 1/(N*N), so multiply back by N*N before ifft2.
     x_rec = np.real(np.fft.ifft2(f_hw * (n * n)))
     u8_rec = np.clip(np.round(x_rec * 128.0 + 128.0), 0, 255).astype(np.uint8)
 
+    # Error in normalized float domain (not uint8), then pass/fail thresholds.
     err = x_rec - x_ref
     max_err = float(np.max(np.abs(err)))
     rmse = float(np.sqrt(np.mean(err * err)))
@@ -207,10 +266,13 @@ def process_image(
     save_png(case_dir / "reconstructed.png", u8_rec)
     diff_u8 = np.clip(np.abs(img_n.astype(np.int16) - u8_rec.astype(np.int16)), 0, 255).astype(np.uint8)
     save_png(case_dir / "difference.png", diff_u8)
+    # Persist numeric report for scripts/CI/manual review.
     with (case_dir / "metrics.txt").open("w", encoding="utf-8") as fp:
         fp.write(f"size={n}\nmax_abs_error={max_err:.8e}\nrmse={rmse:.8e}\npass={int(ok)}\n")
+        if perf_cycles is not None:
+            fp.write(f"perf_cycles={perf_cycles}\n")
 
-    return case_dir.name, max_err, rmse, ok
+    return case_dir.name, max_err, rmse, ok, perf_cycles
 
 
 def main() -> int:
@@ -223,6 +285,7 @@ def main() -> int:
     p.add_argument("--max-n", type=int, default=256, help="cap FFT size to avoid huge simulations")
     args = p.parse_args()
 
+    # Ensure folders exist so first run is smooth.
     args.images_dir.mkdir(parents=True, exist_ok=True)
     args.outdir.mkdir(parents=True, exist_ok=True)
 
@@ -232,11 +295,13 @@ def main() -> int:
         print(f"No images found in {args.images_dir}. Put grayscale images there and rerun.")
         return 0
 
+    # Process each image independently; each produces its own result folder.
     for img in imgs:
-        name, max_err, rmse, ok = process_image(
+        name, max_err, rmse, ok, perf_cycles = process_image(
             img, args.outdir, args.order, args.tol_max, args.tol_rmse, args.max_n
         )
-        print(f"{name}: max_abs_error={max_err:.6e}, rmse={rmse:.6e}, {'PASS' if ok else 'WARN'}")
+        extra = f", cycles={perf_cycles}" if perf_cycles is not None else ""
+        print(f"{name}: max_abs_error={max_err:.6e}, rmse={rmse:.6e}{extra}, {'PASS' if ok else 'WARN'}")
     return 0
 
 

@@ -302,6 +302,8 @@ VL_ATTR_COLD void Vfft2d_core___024root___ctor_var_reset(Vfft2d_core___024root* 
     vlSelf->out_ready = VL_RAND_RESET_I(1);
     vlSelf->out_re = VL_RAND_RESET_I(16);
     vlSelf->out_im = VL_RAND_RESET_I(16);
+    vlSelf->perf_done = VL_RAND_RESET_I(1);
+    vlSelf->perf_cycles = VL_RAND_RESET_Q(64);
     vlSelf->fft2d_core__DOT__state = VL_RAND_RESET_I(3);
     for (int __Vi0 = 0; __Vi0 < 65536; ++__Vi0) {
         vlSelf->fft2d_core__DOT__mem0_re[__Vi0] = VL_RAND_RESET_I(16);
@@ -329,6 +331,8 @@ VL_ATTR_COLD void Vfft2d_core___024root___ctor_var_reset(Vfft2d_core___024root* 
     vlSelf->fft2d_core__DOT__f_in_im = VL_RAND_RESET_I(16);
     vlSelf->fft2d_core__DOT__f_out_re = VL_RAND_RESET_I(16);
     vlSelf->fft2d_core__DOT__f_out_im = VL_RAND_RESET_I(16);
+    vlSelf->fft2d_core__DOT__perf_active = VL_RAND_RESET_I(1);
+    vlSelf->fft2d_core__DOT__perf_counter = VL_RAND_RESET_Q(64);
     vlSelf->fft2d_core__DOT__u_fft1d__DOT__state = VL_RAND_RESET_I(2);
     for (int __Vi0 = 0; __Vi0 < 256; ++__Vi0) {
         vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vi0] = VL_RAND_RESET_I(16);
