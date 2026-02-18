@@ -1,3 +1,0 @@
-max_abs_error=2.92358398e-02
-rmse=1.29892932e-03
-pass=1

@@ -1,6 +1,7 @@
 `default_nettype none
 
 // Q1.15 twiddles for W32^k = exp(-j*2*pi*k/32), k = 0..15.
+// Implemented as combinational ROM using case statement (synthesizable).
 module twiddle_rom #(
     parameter int LOGN = 5
 ) (

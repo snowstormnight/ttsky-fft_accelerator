@@ -3,6 +3,11 @@
 // Iterative radix-2 DIF schedule for one in-place butterfly datapath.
 // Generates (idx_a, idx_b, tw_idx) for each butterfly, then waits for bfly_done
 // before advancing to the next pair.
+//
+// Terminology:
+// - stage: FFT stage index (0 ... LOGN-1)
+// - base : start index of the current butterfly group
+// - j    : butterfly index inside the group
 module fft_controller #(
     parameter int N    = 32,
     parameter int LOGN = 5
@@ -25,6 +30,8 @@ module fft_controller #(
   localparam count_t N_VAL = count_t'(N);
   localparam stage_ext_t LOGN_VAL = stage_ext_t'(LOGN);
 
+  // running: controller active for current FFT block
+  // waiting: a butterfly has been issued; wait for bfly_done
   logic running, waiting;
   logic [STAGE_W-1:0] stage;
   logic [LOGN-1:0] j, base;

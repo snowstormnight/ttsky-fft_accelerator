@@ -5,6 +5,9 @@
 // Outputs:
 //   out_a = (a + b)/2
 //   out_b = ((a - b)/2) * W
+//
+// This module is intentionally serialized for area efficiency:
+// one real multiplier is reused over four micro-steps (S_M1..S_M4).
 module butterfly (
     input  logic                    clk,
     input  logic                    rst_n,
@@ -24,6 +27,7 @@ module butterfly (
 );
 
   typedef logic signed [15:0] q15_t;
+  // Micro-FSM for time-sharing the single multiplier.
   typedef enum logic [2:0] {S_IDLE, S_M1, S_M2, S_M3, S_M4} state_t;
   state_t state;
 
@@ -34,6 +38,7 @@ module butterfly (
   logic signed [31:0] mul_p;
 
   function automatic logic signed [15:0] sat16(input logic signed [31:0] x);
+    // Clamp wide intermediate back to signed 16-bit Q1.15 range.
     if (x > 32'sd32767) sat16 = 16'sd32767;
     else if (x < -32'sd32768) sat16 = -16'sd32768;
     else sat16 = x[15:0];

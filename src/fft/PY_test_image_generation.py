@@ -11,38 +11,43 @@ import numpy as np
 Q = 32768.0
 
 
-def load_mnist_test_images(local_npz: Path | None = None) -> np.ndarray:
-    if local_npz is not None and local_npz.exists():
-        d = np.load(local_npz)
-        if "x_test" not in d:
-            raise RuntimeError(f"{local_npz} does not contain x_test")
-        return d["x_test"].astype(np.uint8)
-    # Primary path requested: tensorflow.keras.datasets
+def load_gray(path: Path) -> np.ndarray:
     try:
-        from tensorflow.keras.datasets import mnist  # type: ignore
-        (_, _), (x_test, _) = mnist.load_data()
-        return x_test.astype(np.uint8)
+        import cv2  # type: ignore
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise RuntimeError(f"failed to read image: {path}")
+        return img.astype(np.uint8)
     except Exception:
-        pass
-    # Equivalent fallback: keras.datasets
-    try:
-        from keras.datasets import mnist  # type: ignore
-        (_, _), (x_test, _) = mnist.load_data()
-        return x_test.astype(np.uint8)
-    except Exception as exc:
-        raise RuntimeError("MNIST loader unavailable. Install tensorflow or keras.") from exc
+        from PIL import Image  # type: ignore
+        return np.asarray(Image.open(path).convert("L"), dtype=np.uint8)
 
 
-def write_png(path: Path, img_u8: np.ndarray) -> None:
+def save_png(path: Path, img_u8: np.ndarray) -> None:
     try:
         import cv2  # type: ignore
         cv2.imwrite(str(path), img_u8)
     except Exception:
-        try:
-            from PIL import Image  # type: ignore
-            Image.fromarray(img_u8).save(path)
-        except Exception as exc:
-            raise RuntimeError("Need cv2 or pillow to save PNG images.") from exc
+        from PIL import Image  # type: ignore
+        Image.fromarray(img_u8).save(path)
+
+
+def resize_square(img: np.ndarray, n: int) -> np.ndarray:
+    try:
+        import cv2  # type: ignore
+        out = cv2.resize(img, (n, n), interpolation=cv2.INTER_AREA if n < img.shape[0] else cv2.INTER_LINEAR)
+        return out.astype(np.uint8)
+    except Exception:
+        from PIL import Image  # type: ignore
+        return np.asarray(Image.fromarray(img).resize((n, n), Image.BILINEAR), dtype=np.uint8)
+
+
+def nearest_pow2(x: int) -> int:
+    if x <= 1:
+        return 2
+    lo = 1 << int(math.floor(math.log2(x)))
+    hi = 1 << int(math.ceil(math.log2(x)))
+    return lo if (x - lo) <= (hi - x) else hi
 
 
 def bitrev_indices(logn: int) -> np.ndarray:
@@ -51,8 +56,6 @@ def bitrev_indices(logn: int) -> np.ndarray:
 
 def bitrev2d_to_natural(x: np.ndarray) -> np.ndarray:
     n = x.shape[0]
-    if (n & (n - 1)) != 0:
-        raise ValueError("bit-reversal requires power-of-2 dimension.")
     idx = bitrev_indices(int(math.log2(n)))
     return x[np.ix_(idx, idx)]
 
@@ -62,8 +65,92 @@ def u8_to_q15(img_u8: np.ndarray) -> np.ndarray:
     return np.clip(np.round(x * Q), -32768, 32767).astype(np.int16)
 
 
-def run_hw_fft(fft_bin: Path, in_txt: Path, out_txt: Path) -> None:
-    subprocess.run([str(fft_bin), str(in_txt), str(out_txt)], check=True)
+def generate_twiddle_rom(path: Path, n: int) -> None:
+    logn = int(math.log2(n))
+    lines = [
+        "`default_nettype none",
+        "",
+        f"// Auto-generated Q1.15 twiddle ROM for W{n}^k, k=0..{n//2 - 1}.",
+        "module twiddle_rom #(",
+        f"    parameter int LOGN = {logn}",
+        ") (",
+        "    input  logic [LOGN-1:0]         idx,",
+        "    output logic signed [15:0]      w_re,",
+        "    output logic signed [15:0]      w_im",
+        ");",
+        "",
+        "  always_comb begin",
+        "    unique case (idx)",
+    ]
+    def sv16(v: int) -> str:
+        return f"-16'sd{abs(v)}" if v < 0 else f"16'sd{v}"
+
+    for k in range(n // 2):
+        re = int(round(math.cos(2 * math.pi * k / n) * Q))
+        im = int(round(-math.sin(2 * math.pi * k / n) * Q))
+        re = max(-32768, min(32767, re))
+        im = max(-32768, min(32767, im))
+        lines.append(f"      {logn}'d{k}: begin w_re = {sv16(re)}; w_im = {sv16(im)}; end")
+    lines += [
+        "      default: begin w_re = 16'sd0; w_im = 16'sd0; end",
+        "    endcase",
+        "  end",
+        "",
+        "endmodule",
+        "",
+        "`default_nettype wire",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def build_hw(repo_fft_dir: Path, n: int) -> Path:
+    logn = int(math.log2(n))
+    build_dir = repo_fft_dir / "build"
+    bin_path = build_dir / "Vfft2d_core"
+    meta_path = build_dir / "fft_n.txt"
+
+    if bin_path.exists() and meta_path.exists():
+        prev_n = meta_path.read_text(encoding="utf-8").strip()
+        if prev_n == str(n):
+            return bin_path
+
+    if build_dir.exists():
+        # Rebuild if target FFT size changed.
+        import shutil
+        shutil.rmtree(build_dir)
+
+    build_dir.mkdir(parents=True, exist_ok=True)
+    twiddle_auto = build_dir / "SV_twiddle_rom_auto.sv"
+    generate_twiddle_rom(twiddle_auto, n)
+
+    cmd = [
+        "verilator",
+        "-Wall",
+        "-Wno-fatal",
+        "--cc",
+        "--exe",
+        "--build",
+        "-O2",
+        "--top-module",
+        "fft2d_core",
+        "-Mdir",
+        str(build_dir.name),
+        f"-GN={n}",
+        f"-GLOGN={logn}",
+        "-CFLAGS",
+        f"-std=c++17 -DFFT_N={n} -DFFT_LOGN={logn}",
+        "SV_fft2d_core.sv",
+        "SV_fft1d_core.sv",
+        "SV_butterfly.sv",
+        "SV_fft_controller.sv",
+        str(twiddle_auto),
+        "CPP_2d_fft_tb.cpp",
+    ]
+    subprocess.run(cmd, check=True, cwd=repo_fft_dir)
+    if not bin_path.exists():
+        raise RuntimeError(f"build failed: {bin_path} not produced")
+    meta_path.write_text(f"{n}\n", encoding="utf-8")
+    return bin_path
 
 
 def parse_hw_fft(path: Path, n: int) -> np.ndarray:
@@ -75,88 +162,81 @@ def parse_hw_fft(path: Path, n: int) -> np.ndarray:
     return (raw[:, 0].astype(np.float64) + 1j * raw[:, 1].astype(np.float64)).reshape(n, n) / Q
 
 
-def pad_q15_to_hw(q28: np.ndarray, hw_n: int) -> np.ndarray:
-    q_hw = np.zeros((hw_n, hw_n), dtype=np.int16)
-    q_hw[: q28.shape[0], : q28.shape[1]] = q28
-    return q_hw
+def process_image(
+    img_path: Path,
+    outdir: Path,
+    order: str,
+    tol_max: float,
+    tol_rmse: float,
+    max_n: int,
+) -> tuple[str, float, float, bool]:
+    img = load_gray(img_path)
+    n = nearest_pow2(max(img.shape[0], img.shape[1]))
+    if n < 2:
+        n = 2
+    if n > max_n:
+        n = max_n
+
+    fft_dir = Path(__file__).resolve().parent
+    fft_bin = build_hw(fft_dir, n)
+
+    img_n = resize_square(img, n)
+    q = u8_to_q15(img_n)
+    x_ref = q.astype(np.float64) / Q
+
+    case_dir = outdir / f"{img_path.stem}_N{n}"
+    case_dir.mkdir(parents=True, exist_ok=True)
+    in_txt = case_dir / "input_tile.txt"
+    out_txt = case_dir / "dut_fft_out.txt"
+    np.savetxt(in_txt, q.reshape(-1), fmt="%d")
+
+    subprocess.run([str(fft_bin), str(in_txt), str(out_txt)], check=True)
+    f_hw = parse_hw_fft(out_txt, n)
+    if order == "bitrev2d":
+        f_hw = bitrev2d_to_natural(f_hw)
+
+    x_rec = np.real(np.fft.ifft2(f_hw * (n * n)))
+    u8_rec = np.clip(np.round(x_rec * 128.0 + 128.0), 0, 255).astype(np.uint8)
+
+    err = x_rec - x_ref
+    max_err = float(np.max(np.abs(err)))
+    rmse = float(np.sqrt(np.mean(err * err)))
+    ok = (max_err <= tol_max) and (rmse <= tol_rmse)
+
+    save_png(case_dir / "original.png", img_n)
+    save_png(case_dir / "reconstructed.png", u8_rec)
+    diff_u8 = np.clip(np.abs(img_n.astype(np.int16) - u8_rec.astype(np.int16)), 0, 255).astype(np.uint8)
+    save_png(case_dir / "difference.png", diff_u8)
+    with (case_dir / "metrics.txt").open("w", encoding="utf-8") as fp:
+        fp.write(f"size={n}\nmax_abs_error={max_err:.8e}\nrmse={rmse:.8e}\npass={int(ok)}\n")
+
+    return case_dir.name, max_err, rmse, ok
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="MNIST hardware FFT -> NumPy IFFT verification (10 images).")
-    p.add_argument("--fft-bin", type=Path, default=Path("fft_hw"), help="hardware fft binary path")
-    p.add_argument("--outdir", type=Path, default=Path("mnist_fft_check"), help="output folder")
-    p.add_argument("--num-images", type=int, default=10, help="number of test images")
-    p.add_argument(
-        "--order",
-        choices=["natural", "bitrev2d"],
-        default="bitrev2d",
-        help="hardware output ordering",
-    )
-    p.add_argument("--tol-max", type=float, default=0.035, help="recommended max error tolerance (float domain)")
-    p.add_argument("--tol-rmse", type=float, default=0.005, help="recommended RMSE tolerance (float domain)")
-    p.add_argument("--hw-n", type=int, default=32, help="hardware FFT size (power of 2)")
-    p.add_argument("--mnist-npz", type=Path, default=Path("data/mnist.npz"), help="local mnist.npz path")
+    p = argparse.ArgumentParser(description="Process grayscale images: HW FFT -> NumPy IFFT -> compare.")
+    p.add_argument("--images-dir", type=Path, default=Path("image"), help="input grayscale image folder")
+    p.add_argument("--outdir", type=Path, default=Path("results"), help="result root folder")
+    p.add_argument("--order", choices=["natural", "bitrev2d"], default="bitrev2d")
+    p.add_argument("--tol-max", type=float, default=0.035)
+    p.add_argument("--tol-rmse", type=float, default=0.005)
+    p.add_argument("--max-n", type=int, default=256, help="cap FFT size to avoid huge simulations")
     args = p.parse_args()
 
-    if not args.fft_bin.exists():
-        raise FileNotFoundError(f"hardware binary not found: {args.fft_bin}")
+    args.images_dir.mkdir(parents=True, exist_ok=True)
+    args.outdir.mkdir(parents=True, exist_ok=True)
 
-    x_test = load_mnist_test_images(args.mnist_npz)
-    n_img = int(x_test.shape[1])
-    if x_test.shape[1] != x_test.shape[2]:
-        raise ValueError("MNIST images must be square.")
-    if args.hw_n < n_img:
-        raise ValueError("hw-n must be >= 28 for MNIST.")
+    exts = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+    imgs = sorted([p for p in args.images_dir.iterdir() if p.is_file() and p.suffix.lower() in exts])
+    if not imgs:
+        print(f"No images found in {args.images_dir}. Put grayscale images there and rerun.")
+        return 0
 
-    outdir = args.outdir
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    ncases = min(args.num_images, x_test.shape[0])
-    print(f"Running {ncases} MNIST images of size {n_img}x{n_img} on HW {args.hw_n}x{args.hw_n}")
-
-    for i in range(ncases):
-        case_dir = outdir / f"img_{i:02d}"
-        case_dir.mkdir(parents=True, exist_ok=True)
-
-        img_u8 = x_test[i]
-        q = u8_to_q15(img_u8)
-        q_hw = pad_q15_to_hw(q, args.hw_n)
-        x_ref = q.astype(np.float64) / Q
-
-        in_txt = case_dir / "input_tile.txt"
-        out_txt = case_dir / "dut_fft_out.txt"
-        np.savetxt(in_txt, q_hw.reshape(-1), fmt="%d")
-        run_hw_fft(args.fft_bin, in_txt, out_txt)
-
-        f_hw = parse_hw_fft(out_txt, args.hw_n)
-        if args.order == "bitrev2d":
-            f_hw = bitrev2d_to_natural(f_hw)
-
-        # Hardware FFT scales by 1/N each pass -> 1/N^2 for 2D. Undo before IFFT.
-        x_rec_full = np.real(np.fft.ifft2(f_hw * (args.hw_n * args.hw_n)))
-        x_rec = x_rec_full[:n_img, :n_img]
-        u8_rec = np.clip(np.round(x_rec * 128.0 + 128.0), 0, 255).astype(np.uint8)
-
-        err = x_rec - x_ref
-        max_abs_error = float(np.max(np.abs(err)))
-        rmse = float(np.sqrt(np.mean(err * err)))
-        ok = (max_abs_error <= args.tol_max) and (rmse <= args.tol_rmse)
-
-        write_png(case_dir / "original.png", img_u8)
-        write_png(case_dir / "reconstructed.png", u8_rec)
-        diff_u8 = np.clip(np.abs(img_u8.astype(np.int16) - u8_rec.astype(np.int16)), 0, 255).astype(np.uint8)
-        write_png(case_dir / "difference.png", diff_u8)
-
-        with (case_dir / "metrics.txt").open("w", encoding="utf-8") as fp:
-            fp.write(f"max_abs_error={max_abs_error:.8e}\n")
-            fp.write(f"rmse={rmse:.8e}\n")
-            fp.write(f"pass={int(ok)}\n")
-
-        print(
-            f"img_{i:02d}: max_abs_error={max_abs_error:.6e}, rmse={rmse:.6e}, "
-            f"{'PASS' if ok else 'WARN'}"
+    for img in imgs:
+        name, max_err, rmse, ok = process_image(
+            img, args.outdir, args.order, args.tol_max, args.tol_rmse, args.max_n
         )
-
+        print(f"{name}: max_abs_error={max_err:.6e}, rmse={rmse:.6e}, {'PASS' if ok else 'WARN'}")
     return 0
 
 

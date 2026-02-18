@@ -1,8 +1,19 @@
 `default_nettype none
 
-// 2D FFT core using one reused 1D FFT core (row pass then column pass).
-// Input:  N*N samples in natural raster order.
-// Output: N*N complex bins in bit-reversed order on both axes.
+// 2D FFT core using ONE reused 1D FFT core (area-efficient architecture).
+//
+// Big picture:
+// 1) Load one full image tile (N x N) into mem0.
+// 2) Run 1D FFT on each row  -> write to mem1.
+// 3) Run 1D FFT on each col  -> write back to mem0.
+// 4) Drain mem0 as final 2D FFT output.
+//
+// Input order:
+// - natural raster (row-major): pixel0, pixel1, ...
+//
+// Output order:
+// - bit-reversed on both axes (because 1D DIF FFT output is bit-reversed).
+// - software can convert to natural order for analysis/IFFT.
 module fft2d_core #(
     parameter int N    = 32,
     parameter int LOGN = 5
@@ -27,6 +38,9 @@ module fft2d_core #(
   } state_t;
   state_t state;
 
+  // Two local memories:
+  // - mem0: input and final output workspace
+  // - mem1: intermediate row-FFT workspace
   logic signed [15:0] mem0_re [0:TOT-1];
   logic signed [15:0] mem0_im [0:TOT-1];
   logic signed [15:0] mem1_re [0:TOT-1];
@@ -36,6 +50,7 @@ module fft2d_core #(
   logic [AW-1:0] out_ptr;
   logic [AW-1:0] load_ptr;
 
+  // Convert 2D index (row, col) -> 1D row-major address.
   function automatic logic [AW-1:0] idx2d(input logic [LOGN-1:0] r, input logic [LOGN-1:0] c);
     idx2d = {r, c};
   endfunction
@@ -56,6 +71,9 @@ module fft2d_core #(
       .out_im(f_out_im)
   );
 
+  // External block-level handshake:
+  // - ready during full-tile load
+  // - valid during full-tile drain
   assign in_ready  = (state == ST_LOAD);
   assign out_valid = (state == ST_DRAIN);
 
@@ -68,18 +86,23 @@ module fft2d_core #(
     out_im      = '0;
 
     unique case (state)
+      // Feed one row into 1D FFT.
       ST_ROW_FEED: begin
         f_in_valid = 1'b1;
         f_in_re    = mem0_re[idx2d(row_idx, feed_cnt)];
         f_in_im    = mem0_im[idx2d(row_idx, feed_cnt)];
       end
+      // Receive one row from 1D FFT.
       ST_ROW_RECV: f_out_ready = 1'b1;
+      // Feed one column into 1D FFT.
       ST_COL_FEED: begin
         f_in_valid = 1'b1;
         f_in_re    = mem1_re[idx2d(feed_cnt, col_idx)];
         f_in_im    = mem1_im[idx2d(feed_cnt, col_idx)];
       end
+      // Receive one column from 1D FFT.
       ST_COL_RECV: f_out_ready = 1'b1;
+      // Drain final 2D FFT bins out.
       ST_DRAIN: begin
         out_re = mem0_re[out_ptr];
         out_im = mem0_im[out_ptr];
@@ -99,6 +122,7 @@ module fft2d_core #(
       out_ptr   <= '0;
     end else begin
       unique case (state)
+        // Load exactly N*N complex samples.
         ST_LOAD: begin
           if (in_valid && in_ready) begin
             mem0_re[load_ptr] <= in_re;
@@ -115,6 +139,7 @@ module fft2d_core #(
           end
         end
 
+        // Push one row into 1D core.
         ST_ROW_FEED: begin
           if (f_in_valid && f_in_ready) begin
             if (feed_cnt == LOGN'(N - 1)) begin
@@ -127,6 +152,7 @@ module fft2d_core #(
           end
         end
 
+        // Collect one row result from 1D core.
         ST_ROW_RECV: begin
           if (f_out_valid && f_out_ready) begin
             mem1_re[idx2d(row_idx, recv_cnt)] <= f_out_re;
@@ -149,6 +175,7 @@ module fft2d_core #(
           end
         end
 
+        // Push one column (from mem1) into 1D core.
         ST_COL_FEED: begin
           if (f_in_valid && f_in_ready) begin
             if (feed_cnt == LOGN'(N - 1)) begin
@@ -161,6 +188,7 @@ module fft2d_core #(
           end
         end
 
+        // Collect one column result and write final bins into mem0.
         ST_COL_RECV: begin
           if (f_out_valid && f_out_ready) begin
             mem0_re[idx2d(recv_cnt, col_idx)] <= f_out_re;
@@ -181,6 +209,7 @@ module fft2d_core #(
           end
         end
 
+        // Stream out final N*N bins.
         ST_DRAIN: begin
           if (out_valid && out_ready) begin
             if (out_ptr == AW'(TOT - 1)) begin

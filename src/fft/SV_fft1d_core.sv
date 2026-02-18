@@ -1,7 +1,10 @@
 `default_nettype none
 
 // 1D FFT core (N=32 default), radix-2 DIF, in-place iterative architecture.
-// Input order: natural. Output order: bit-reversed.
+// Input order : natural
+// Output order: bit-reversed
+// Reason for bit-reversed output: DIF structure gives this ordering naturally.
+// Reordering is typically done in software (or a later hardware stage if needed).
 // High-level flow:
 //   1) ST_LOAD: collect exactly N input complex samples into local RAM.
 //   2) ST_RUN : controller schedules all butterflies in-place over RAM.
@@ -28,7 +31,7 @@ module fft1d_core #(
   typedef enum logic [1:0] {ST_LOAD, ST_RUN, ST_OUT} state_t;
   state_t state;
 
-  // In-place complex sample storage for one FFT block.
+  // In-place complex sample RAM for one FFT block.
   logic signed [15:0] mem_re [0:N-1];
   logic signed [15:0] mem_im [0:N-1];
   logic [LOGN-1:0] load_ptr, out_ptr;
@@ -79,9 +82,11 @@ module fft1d_core #(
 
   wire _unused = &{ctrl_busy_unused, bfly_busy_unused, 1'b0};
 
+  // External streaming handshake.
   assign in_ready  = (state == ST_LOAD);
   assign out_valid = (state == ST_OUT);
 
+  // Output mux during drain phase.
   always_comb begin
     out_re = '0;
     out_im = '0;
@@ -100,7 +105,7 @@ module fft1d_core #(
     end else begin
       ctrl_start <= 1'b0;
 
-      // Writeback for one completed butterfly pair.
+      // Write back one completed butterfly pair to RAM.
       if (bfly_done) begin
         mem_re[idx_a] <= bfly_a_re;
         mem_im[idx_a] <= bfly_a_im;
@@ -109,6 +114,7 @@ module fft1d_core #(
       end
 
       unique case (state)
+        // Accept exactly N samples.
         ST_LOAD: begin
           if (in_valid && in_ready) begin
             mem_re[load_ptr] <= in_re;
@@ -123,6 +129,7 @@ module fft1d_core #(
             end
           end
         end
+        // Compute phase: controller iterates across all stages/pairs.
         ST_RUN: begin
           if (ctrl_done) begin
             // All butterflies completed; begin output drain.
@@ -130,6 +137,7 @@ module fft1d_core #(
             state   <= ST_OUT;
           end
         end
+        // Drain exactly N output bins.
         ST_OUT: begin
           if (out_valid && out_ready) begin
             if (out_ptr == LAST_IDX) begin

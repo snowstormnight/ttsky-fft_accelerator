@@ -6,9 +6,16 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace {
-constexpr int N = 32;
+#ifndef FFT_N
+#define FFT_N 32
+#endif
+#ifndef FFT_LOGN
+#define FFT_LOGN 5
+#endif
+constexpr int N = FFT_N;
 constexpr int TILE = N * N;
 
 struct C16 {
@@ -37,7 +44,9 @@ void reset_dut(Vfft2d_core& dut) {
   dut.rst_n = 1;
 }
 
-bool parse_txt_tile(const std::string& in_path, std::array<C16, TILE>& tile) {
+// Read one integer per line (row-major flattened image tile).
+// Expected count: TILE = N*N samples.
+bool parse_txt_tile(const std::string& in_path, std::vector<C16>& tile) {
   std::ifstream fin(in_path);
   if (!fin) return false;
   int idx = 0;
@@ -58,7 +67,8 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  std::array<C16, TILE> input_tile{};
+  // Input is real-valued image samples in Q1.15.
+  std::vector<C16> input_tile(TILE);
   if (!parse_txt_tile(argv[1], input_tile)) {
     std::cerr << "failed to parse input tile, expected 1024 integers (one per line)\n";
     return 2;
@@ -68,11 +78,16 @@ int main(int argc, char** argv) {
   Vfft2d_core dut;
   reset_dut(dut);
 
+  // Stream counters:
+  // in_idx  -> how many input samples accepted by DUT
+  // out_idx -> how many FFT bins produced by DUT
   int in_idx = 0;
   int out_idx = 0;
-  std::array<C16, TILE> out_tile{};
+  std::vector<C16> out_tile(TILE);
 
-  for (int cyc = 0; cyc < 2000000 && out_idx < TILE; ++cyc) {
+  // Timeout scales with problem size.
+  const long long max_cycles = 50LL * TILE * FFT_LOGN + 20000LL;
+  for (long long cyc = 0; cyc < max_cycles && out_idx < TILE; ++cyc) {
     if (in_idx < TILE) {
       dut.in_valid = 1;
       dut.in_re = static_cast<uint16_t>(input_tile[in_idx].re);
@@ -84,6 +99,7 @@ int main(int argc, char** argv) {
     }
     dut.out_ready = 1;
 
+    // Evaluate current combinational state, then handshake.
     dut.eval();
     // Sample handshakes before toggling to next cycle.
     const bool take_in = dut.in_valid && dut.in_ready;
@@ -104,7 +120,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Output format: one complex bin per line: "<re> <im>".
+  // Output format (for Python post-processing):
+  // one complex bin per line: "<real_int> <imag_int>".
   std::ofstream fout(argv[2]);
   if (!fout) {
     std::cerr << "failed to open output file: " << argv[2] << "\n";

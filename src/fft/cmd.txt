@@ -1,5 +1,4 @@
 cd ~/project/ASIC_Hack/src/fft
 
-verilator -Wall -Wno-fatal --cc --exe --build -O2 --top-module fft2d_core -Mdir build2d -CFLAGS '-std=c++17' SV_fft2d_core.sv SV_fft1d_core.sv SV_butterfly.sv SV_twiddle_rom.sv SV_fft_controller.sv CPP_2d_fft_tb.cpp
-
-python3 PY_test_image_generation.py --fft-bin build2d/Vfft2d_core --order bitrev2d --hw-n 32 --mnist-npz data/mnist.npz --num-images 10 --outdir mnist_fft_check
+mkdir -p image
+python3 PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256
