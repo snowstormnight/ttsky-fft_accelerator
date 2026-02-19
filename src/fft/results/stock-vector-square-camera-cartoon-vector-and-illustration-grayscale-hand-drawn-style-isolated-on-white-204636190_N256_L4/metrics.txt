@@ -1,0 +1,6 @@
+size=256
+lanes=4
+max_abs_error=1.94171143e+00
+rmse=9.48379122e-03
+pass=1
+perf_cycles=1114367
