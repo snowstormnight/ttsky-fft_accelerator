@@ -26,6 +26,7 @@ VM_CLASSES_FAST += \
 	Vfft2d_core \
 	Vfft2d_core___024root__DepSet_h15ecdab3__0 \
 	Vfft2d_core___024root__DepSet_h97724007__0 \
+	Vfft2d_core_fft1d_core__N100_L8__DepSet_haed08f94__0 \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization
 VM_CLASSES_SLOW += \
@@ -33,6 +34,8 @@ VM_CLASSES_SLOW += \
 	Vfft2d_core___024root__Slow \
 	Vfft2d_core___024root__DepSet_h15ecdab3__0__Slow \
 	Vfft2d_core___024root__DepSet_h97724007__0__Slow \
+	Vfft2d_core_fft1d_core__N100_L8__Slow \
+	Vfft2d_core_fft1d_core__N100_L8__DepSet_h2c8e12ec__0__Slow \
 
 # Generated support classes, fast-path, compile with highest optimization
 VM_SUPPORT_FAST += \

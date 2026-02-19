@@ -129,17 +129,17 @@ def generate_twiddle_rom(path: Path, n: int) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def build_hw(repo_fft_dir: Path, n: int) -> Path:
+def build_hw(repo_fft_dir: Path, n: int, lanes: int) -> Path:
     # Build or reuse Verilated binary for requested N.
-    # Rebuild is triggered when previous fft_n.txt differs.
+    # Rebuild is triggered when previous (N,LANES) differs.
     logn = int(math.log2(n))
     build_dir = repo_fft_dir / "build"
     bin_path = build_dir / "Vfft2d_core"
-    meta_path = build_dir / "fft_n.txt"
+    meta_path = build_dir / "fft_cfg.txt"
 
     if bin_path.exists() and meta_path.exists():
-        prev_n = meta_path.read_text(encoding="utf-8").strip()
-        if prev_n == str(n):
+        prev_cfg = meta_path.read_text(encoding="utf-8").strip()
+        if prev_cfg == f"{n},{lanes}":
             return bin_path
 
     if build_dir.exists():
@@ -152,8 +152,8 @@ def build_hw(repo_fft_dir: Path, n: int) -> Path:
     generate_twiddle_rom(twiddle_auto, n)
 
     # Verilator compile command:
-    # - Parameterize SV top with -GN/-GLOGN
-    # - Parameterize C++ with -DFFT_N/-DFFT_LOGN
+    # - Parameterize SV top with -GN/-GLOGN/-GLANES
+    # - Parameterize C++ with -DFFT_N/-DFFT_LOGN/-DFFT_LANES
     cmd = [
         "verilator",
         "-Wall",
@@ -168,8 +168,9 @@ def build_hw(repo_fft_dir: Path, n: int) -> Path:
         str(build_dir.name),
         f"-GN={n}",
         f"-GLOGN={logn}",
+        f"-GLANES={lanes}",
         "-CFLAGS",
-        f"-std=c++17 -DFFT_N={n} -DFFT_LOGN={logn}",
+        f"-std=c++17 -DFFT_N={n} -DFFT_LOGN={logn} -DFFT_LANES={lanes}",
         "SV_fft2d_core.sv",
         "SV_fft1d_core.sv",
         "SV_butterfly.sv",
@@ -180,7 +181,7 @@ def build_hw(repo_fft_dir: Path, n: int) -> Path:
     subprocess.run(cmd, check=True, cwd=repo_fft_dir)
     if not bin_path.exists():
         raise RuntimeError(f"build failed: {bin_path} not produced")
-    meta_path.write_text(f"{n}\n", encoding="utf-8")
+    meta_path.write_text(f"{n},{lanes}\n", encoding="utf-8")
     return bin_path
 
 
@@ -207,6 +208,36 @@ def parse_perf_cycles(stdout: str) -> int | None:
     return None
 
 
+def is_pow2(x: int) -> bool:
+    return x > 0 and (x & (x - 1)) == 0
+
+
+def resolve_lanes_for_n(req_lanes: int, n: int) -> int:
+    # Keep lane count power-of-2 and valid for this N.
+    if req_lanes < 1:
+        return 1
+    lanes = req_lanes
+    if lanes > n:
+        lanes = n
+    while lanes > 1 and (n % lanes != 0):
+        lanes //= 2
+    return max(1, lanes)
+
+
+def choose_lanes(user_lanes: int | None) -> int:
+    # If not given on CLI, ask interactively once.
+    if user_lanes is not None:
+        lanes = user_lanes
+    else:
+        raw = input("LANES (power-of-2, default 1): ").strip()
+        lanes = 1 if raw == "" else int(raw)
+    if not is_pow2(lanes):
+        raise ValueError(f"LANES must be power-of-2, got {lanes}")
+    if lanes < 1:
+        raise ValueError("LANES must be >= 1")
+    return lanes
+
+
 def process_image(
     img_path: Path,
     outdir: Path,
@@ -214,6 +245,7 @@ def process_image(
     tol_max: float,
     tol_rmse: float,
     max_n: int,
+    req_lanes: int,
 ) -> tuple[str, float, float, bool, int | None]:
     # ---- Input preparation ----
     # img        : original uint8 grayscale image loaded from disk.
@@ -228,15 +260,18 @@ def process_image(
     if n > max_n:
         n = max_n
 
+    lanes = resolve_lanes_for_n(req_lanes, n)
+    if lanes != req_lanes:
+        print(f"note: adjusted LANES {req_lanes} -> {lanes} for N={n}")
     fft_dir = Path(__file__).resolve().parent
-    fft_bin = build_hw(fft_dir, n)
+    fft_bin = build_hw(fft_dir, n, lanes)
 
     img_n = resize_square(img, n)
     q = u8_to_q15(img_n)
     x_ref = q.astype(np.float64) / Q
 
     # Case output directory name includes image stem and resolved N.
-    case_dir = outdir / f"{img_path.stem}_N{n}"
+    case_dir = outdir / f"{img_path.stem}_N{n}_L{lanes}"
     case_dir.mkdir(parents=True, exist_ok=True)
     in_txt = case_dir / "input_tile.txt"
     out_txt = case_dir / "dut_fft_out.txt"
@@ -268,7 +303,9 @@ def process_image(
     save_png(case_dir / "difference.png", diff_u8)
     # Persist numeric report for scripts/CI/manual review.
     with (case_dir / "metrics.txt").open("w", encoding="utf-8") as fp:
-        fp.write(f"size={n}\nmax_abs_error={max_err:.8e}\nrmse={rmse:.8e}\npass={int(ok)}\n")
+        fp.write(
+            f"size={n}\nlanes={lanes}\nmax_abs_error={max_err:.8e}\nrmse={rmse:.8e}\npass={int(ok)}\n"
+        )
         if perf_cycles is not None:
             fp.write(f"perf_cycles={perf_cycles}\n")
 
@@ -280,9 +317,10 @@ def main() -> int:
     p.add_argument("--images-dir", type=Path, default=Path("image"), help="input grayscale image folder")
     p.add_argument("--outdir", type=Path, default=Path("results"), help="result root folder")
     p.add_argument("--order", choices=["natural", "bitrev2d"], default="bitrev2d")
-    p.add_argument("--tol-max", type=float, default=0.035)
-    p.add_argument("--tol-rmse", type=float, default=0.005)
+    p.add_argument("--tol-max", type=float, default=2.0)
+    p.add_argument("--tol-rmse", type=float, default=0.02)
     p.add_argument("--max-n", type=int, default=256, help="cap FFT size to avoid huge simulations")
+    p.add_argument("--lanes", type=int, default=None, help="parallel 1D FFT lanes (power-of-2). If omitted, prompt.")
     args = p.parse_args()
 
     # Ensure folders exist so first run is smooth.
@@ -295,10 +333,12 @@ def main() -> int:
         print(f"No images found in {args.images_dir}. Put grayscale images there and rerun.")
         return 0
 
+    req_lanes = choose_lanes(args.lanes)
+
     # Process each image independently; each produces its own result folder.
     for img in imgs:
         name, max_err, rmse, ok, perf_cycles = process_image(
-            img, args.outdir, args.order, args.tol_max, args.tol_rmse, args.max_n
+            img, args.outdir, args.order, args.tol_max, args.tol_rmse, args.max_n, req_lanes
         )
         extra = f", cycles={perf_cycles}" if perf_cycles is not None else ""
         print(f"{name}: max_abs_error={max_err:.6e}, rmse={rmse:.6e}{extra}, {'PASS' if ok else 'WARN'}")

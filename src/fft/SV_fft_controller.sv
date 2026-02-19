@@ -21,7 +21,6 @@
 // - bfly_done: acknowledgment from datapath that butterfly writeback is ready.
 // - done: one pulse when all stages/pairs are finished.
 //
-// This controller has no arithmetic data path itself; it only emits indices.
 // -----------------------------------------------------------------------------
 module fft_controller #(
     parameter int N    = 32,

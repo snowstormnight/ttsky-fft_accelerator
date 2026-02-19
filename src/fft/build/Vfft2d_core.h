@@ -12,6 +12,8 @@
 
 class Vfft2d_core__Syms;
 class Vfft2d_core___024root;
+class Vfft2d_core_fft1d_core__N100_L8;
+
 
 // This class is the main interface to the Verilated model
 class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core VL_NOT_FINAL : public VerilatedModel {
@@ -40,6 +42,10 @@ class alignas(VL_CACHE_LINE_BYTES) Vfft2d_core VL_NOT_FINAL : public VerilatedMo
     // CELLS
     // Public to allow access to /* verilator public */ items.
     // Otherwise the application code can consider these internals.
+    Vfft2d_core_fft1d_core__N100_L8* const __PVT__fft2d_core__DOT__g_fft__BRA__0__KET____DOT__u_fft1d;
+    Vfft2d_core_fft1d_core__N100_L8* const __PVT__fft2d_core__DOT__g_fft__BRA__1__KET____DOT__u_fft1d;
+    Vfft2d_core_fft1d_core__N100_L8* const __PVT__fft2d_core__DOT__g_fft__BRA__2__KET____DOT__u_fft1d;
+    Vfft2d_core_fft1d_core__N100_L8* const __PVT__fft2d_core__DOT__g_fft__BRA__3__KET____DOT__u_fft1d;
 
     // Root instance pointer to allow access to model internals,
     // including inlined /* verilator public_flat_* */ items.

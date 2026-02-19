@@ -15,11 +15,15 @@ namespace {
 #ifndef FFT_LOGN
 #define FFT_LOGN 5
 #endif
+#ifndef FFT_LANES
+#define FFT_LANES 1
+#endif
 // N and TILE are compile-time constants passed from Python->Verilator build.
 // Example for 256x256 run:
 //   N=256, TILE=65536 samples.
 constexpr int N = FFT_N;
 constexpr int TILE = N * N;
+constexpr int LANES = FFT_LANES;
 
 // Complex sample container matching DUT I/O width.
 struct C16 {
@@ -158,6 +162,7 @@ int main(int argc, char** argv) {
   }
   for (int i = 0; i < TILE; ++i) fout << out_tile[i].re << " " << out_tile[i].im << "\n";
   // Print performance counter in machine-parseable format.
+  std::cout << "PERF_CFG N=" << N << " LANES=" << LANES << "\n";
   if (got_perf) {
     std::cout << "PERF_CYCLES " << block_cycles << "\n";
   }

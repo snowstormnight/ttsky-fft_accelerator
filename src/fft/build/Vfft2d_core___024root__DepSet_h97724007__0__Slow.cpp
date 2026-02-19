@@ -47,7 +47,7 @@ VL_ATTR_COLD void Vfft2d_core___024root___eval_settle(Vfft2d_core___024root* vlS
 #ifdef VL_DEBUG
             Vfft2d_core___024root___dump_triggers__stl(vlSelf);
 #endif
-            VL_FATAL_MT("SV_fft2d_core.sv", 17, "", "Settle region did not converge.");
+            VL_FATAL_MT("SV_fft2d_core.sv", 19, "", "Settle region did not converge.");
         }
         __VstlIterCount = ((IData)(1U) + __VstlIterCount);
         __VstlContinue = 0U;
@@ -73,174 +73,8 @@ VL_ATTR_COLD void Vfft2d_core___024root___dump_triggers__stl(Vfft2d_core___024ro
 }
 #endif  // VL_DEBUG
 
-extern const VlUnpacked<SData/*15:0*/, 256> Vfft2d_core__ConstPool__TABLE_hd83d655a_0;
-extern const VlUnpacked<SData/*15:0*/, 256> Vfft2d_core__ConstPool__TABLE_h6c2add80_0;
-
-VL_ATTR_COLD void Vfft2d_core___024root___stl_sequent__TOP__0(Vfft2d_core___024root* vlSelf) {
-    if (false && vlSelf) {}  // Prevent unused
-    Vfft2d_core__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vfft2d_core___024root___stl_sequent__TOP__0\n"); );
-    // Init
-    SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a;
-    fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a = 0;
-    SData/*15:0*/ fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b;
-    fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b = 0;
-    CData/*7:0*/ __Vtableidx1;
-    __Vtableidx1 = 0;
-    // Body
-    vlSelf->in_ready = (0U == (IData)(vlSelf->fft2d_core__DOT__state));
-    vlSelf->out_valid = (5U == (IData)(vlSelf->fft2d_core__DOT__state));
-    vlSelf->fft2d_core__DOT__f_in_ready = (0U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state));
-    if ((2U == (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__state))) {
-        vlSelf->fft2d_core__DOT__f_out_valid = 1U;
-        vlSelf->fft2d_core__DOT__f_out_re = 0U;
-        vlSelf->fft2d_core__DOT__f_out_im = 0U;
-        vlSelf->fft2d_core__DOT__f_out_re = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re
-            [vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr];
-        vlSelf->fft2d_core__DOT__f_out_im = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im
-            [vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr];
-    } else {
-        vlSelf->fft2d_core__DOT__f_out_valid = 0U;
-        vlSelf->fft2d_core__DOT__f_out_re = 0U;
-        vlSelf->fft2d_core__DOT__f_out_im = 0U;
-    }
-    fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a = 0U;
-    fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b = 0U;
-    if ((4U & (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state))) {
-        if ((1U & (~ ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state) 
-                      >> 1U)))) {
-            if ((1U & (~ (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state)))) {
-                fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a 
-                    = vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_im_r;
-                fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b 
-                    = vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__w_re_r;
-            }
-        }
-    } else if ((2U & (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state))) {
-        fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a 
-            = ((1U & (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state))
-                ? (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_re_r)
-                : (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_im_r));
-        fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b 
-            = vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__w_im_r;
-    } else if ((1U & (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state))) {
-        fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a 
-            = vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_re_r;
-        fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b 
-            = vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__w_re_r;
-    }
-    __Vtableidx1 = (0xffU & ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j) 
-                             << (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage)));
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__w_re = Vfft2d_core__ConstPool__TABLE_hd83d655a_0
-        [__Vtableidx1];
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__w_im = Vfft2d_core__ConstPool__TABLE_h6c2add80_0
-        [__Vtableidx1];
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a = 
-        (0xffU & ((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base) 
-                  + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j)));
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span 
-        = (0x1ffU & (0x100U >> (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage)));
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half 
-        = (0x1ffU & VL_SHIFTR_III(9,9,32, (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span), 1U));
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b = 
-        (0xffU & (((IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base) 
-                   + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j)) 
-                  + (IData)(vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half)));
-    vlSelf->fft2d_core__DOT__f_in_valid = 0U;
-    vlSelf->fft2d_core__DOT__f_in_re = 0U;
-    vlSelf->fft2d_core__DOT__f_in_im = 0U;
-    vlSelf->fft2d_core__DOT__f_out_ready = 0U;
-    vlSelf->out_re = 0U;
-    vlSelf->out_im = 0U;
-    if ((4U & (IData)(vlSelf->fft2d_core__DOT__state))) {
-        if ((1U & (~ ((IData)(vlSelf->fft2d_core__DOT__state) 
-                      >> 1U)))) {
-            if ((1U & (IData)(vlSelf->fft2d_core__DOT__state))) {
-                vlSelf->out_re = vlSelf->fft2d_core__DOT__mem0_re
-                    [vlSelf->fft2d_core__DOT__out_ptr];
-                vlSelf->out_im = vlSelf->fft2d_core__DOT__mem0_im
-                    [vlSelf->fft2d_core__DOT__out_ptr];
-            } else {
-                vlSelf->fft2d_core__DOT__f_out_ready = 1U;
-            }
-        }
-    } else if ((2U & (IData)(vlSelf->fft2d_core__DOT__state))) {
-        if ((1U & (IData)(vlSelf->fft2d_core__DOT__state))) {
-            vlSelf->fft2d_core__DOT__f_in_valid = 1U;
-            vlSelf->fft2d_core__DOT__f_in_re = vlSelf->fft2d_core__DOT__mem1_re
-                [([&]() {
-                    vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__c 
-                        = vlSelf->fft2d_core__DOT__col_idx;
-                    vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__r 
-                        = vlSelf->fft2d_core__DOT__feed_cnt;
-                    vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__Vfuncout 
-                        = (((IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__r) 
-                            << 8U) | (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__c));
-                }(), (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__Vfuncout))];
-            vlSelf->fft2d_core__DOT__f_in_im = vlSelf->fft2d_core__DOT__mem1_im
-                [([&]() {
-                    vlSelf->__Vfunc_fft2d_core__DOT__idx2d__1__c 
-                        = vlSelf->fft2d_core__DOT__col_idx;
-                    vlSelf->__Vfunc_fft2d_core__DOT__idx2d__1__r 
-                        = vlSelf->fft2d_core__DOT__feed_cnt;
-                    vlSelf->__Vfunc_fft2d_core__DOT__idx2d__1__Vfuncout 
-                        = (((IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__1__r) 
-                            << 8U) | (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__1__c));
-                }(), (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__1__Vfuncout))];
-        } else {
-            vlSelf->fft2d_core__DOT__f_out_ready = 1U;
-        }
-    } else if ((1U & (IData)(vlSelf->fft2d_core__DOT__state))) {
-        vlSelf->fft2d_core__DOT__f_in_valid = 1U;
-        vlSelf->fft2d_core__DOT__f_in_re = vlSelf->fft2d_core__DOT__mem0_re
-            [([&]() {
-                vlSelf->__Vfunc_fft2d_core__DOT__idx2d__2__c 
-                    = vlSelf->fft2d_core__DOT__feed_cnt;
-                vlSelf->__Vfunc_fft2d_core__DOT__idx2d__2__r 
-                    = vlSelf->fft2d_core__DOT__row_idx;
-                vlSelf->__Vfunc_fft2d_core__DOT__idx2d__2__Vfuncout 
-                    = (((IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__2__r) 
-                        << 8U) | (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__2__c));
-            }(), (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__2__Vfuncout))];
-        vlSelf->fft2d_core__DOT__f_in_im = vlSelf->fft2d_core__DOT__mem0_im
-            [([&]() {
-                vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__c 
-                    = vlSelf->fft2d_core__DOT__feed_cnt;
-                vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__r 
-                    = vlSelf->fft2d_core__DOT__row_idx;
-                vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__Vfuncout 
-                    = (((IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__r) 
-                        << 8U) | (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__c));
-            }(), (IData)(vlSelf->__Vfunc_fft2d_core__DOT__idx2d__3__Vfuncout))];
-    }
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_p 
-        = VL_MULS_III(32, VL_EXTENDS_II(32,16, (IData)(fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_a)), 
-                      VL_EXTENDS_II(32,16, (IData)(fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_b)));
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__a_re 
-        = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re
-        [vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a];
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__a_im 
-        = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im
-        [vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a];
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__b_re 
-        = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re
-        [vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b];
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__b_im 
-        = vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im
-        [vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b];
-}
-
-VL_ATTR_COLD void Vfft2d_core___024root___eval_stl(Vfft2d_core___024root* vlSelf) {
-    if (false && vlSelf) {}  // Prevent unused
-    Vfft2d_core__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vfft2d_core___024root___eval_stl\n"); );
-    // Body
-    if ((1ULL & vlSelf->__VstlTriggered.word(0U))) {
-        Vfft2d_core___024root___stl_sequent__TOP__0(vlSelf);
-    }
-}
-
 VL_ATTR_COLD void Vfft2d_core___024root___eval_triggers__stl(Vfft2d_core___024root* vlSelf);
+VL_ATTR_COLD void Vfft2d_core___024root___eval_stl(Vfft2d_core___024root* vlSelf);
 
 VL_ATTR_COLD bool Vfft2d_core___024root___eval_phase__stl(Vfft2d_core___024root* vlSelf) {
     if (false && vlSelf) {}  // Prevent unused
@@ -317,65 +151,31 @@ VL_ATTR_COLD void Vfft2d_core___024root___ctor_var_reset(Vfft2d_core___024root* 
     for (int __Vi0 = 0; __Vi0 < 65536; ++__Vi0) {
         vlSelf->fft2d_core__DOT__mem1_im[__Vi0] = VL_RAND_RESET_I(16);
     }
-    vlSelf->fft2d_core__DOT__row_idx = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__col_idx = VL_RAND_RESET_I(8);
+    vlSelf->fft2d_core__DOT__batch_base = VL_RAND_RESET_I(8);
     vlSelf->fft2d_core__DOT__feed_cnt = VL_RAND_RESET_I(8);
     vlSelf->fft2d_core__DOT__recv_cnt = VL_RAND_RESET_I(8);
     vlSelf->fft2d_core__DOT__out_ptr = VL_RAND_RESET_I(16);
     vlSelf->fft2d_core__DOT__load_ptr = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__f_in_valid = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__f_in_ready = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__f_out_valid = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__f_out_ready = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__f_in_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__f_in_im = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__f_out_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__f_out_im = VL_RAND_RESET_I(16);
+    vlSelf->fft2d_core__DOT__f_in_valid = VL_RAND_RESET_I(4);
+    vlSelf->fft2d_core__DOT__f_out_ready = VL_RAND_RESET_I(4);
+    for (int __Vi0 = 0; __Vi0 < 4; ++__Vi0) {
+        vlSelf->fft2d_core__DOT__f_in_re[__Vi0] = VL_RAND_RESET_I(16);
+    }
+    for (int __Vi0 = 0; __Vi0 < 4; ++__Vi0) {
+        vlSelf->fft2d_core__DOT__f_in_im[__Vi0] = VL_RAND_RESET_I(16);
+    }
+    for (int __Vi0 = 0; __Vi0 < 4; ++__Vi0) {
+        vlSelf->fft2d_core__DOT__f_out_re[__Vi0] = VL_RAND_RESET_I(16);
+    }
+    for (int __Vi0 = 0; __Vi0 < 4; ++__Vi0) {
+        vlSelf->fft2d_core__DOT__f_out_im[__Vi0] = VL_RAND_RESET_I(16);
+    }
+    vlSelf->fft2d_core__DOT__feed_fire = VL_RAND_RESET_I(1);
+    vlSelf->fft2d_core__DOT__recv_fire = VL_RAND_RESET_I(1);
     vlSelf->fft2d_core__DOT__perf_active = VL_RAND_RESET_I(1);
     vlSelf->fft2d_core__DOT__perf_counter = VL_RAND_RESET_Q(64);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__state = VL_RAND_RESET_I(2);
-    for (int __Vi0 = 0; __Vi0 < 256; ++__Vi0) {
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_re[__Vi0] = VL_RAND_RESET_I(16);
-    }
-    for (int __Vi0 = 0; __Vi0 < 256; ++__Vi0) {
-        vlSelf->fft2d_core__DOT__u_fft1d__DOT__mem_im[__Vi0] = VL_RAND_RESET_I(16);
-    }
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__load_ptr = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__out_ptr = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_start = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__ctrl_done = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_start = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_done = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_a = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__idx_b = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__w_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__w_im = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_a_im = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_b_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__bfly_b_im = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__b_im = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__b_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__a_im = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT____Vcellinp__u_bfly__a_re = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__running = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__waiting = VL_RAND_RESET_I(1);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__stage = VL_RAND_RESET_I(3);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__j = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__base = VL_RAND_RESET_I(8);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__span = VL_RAND_RESET_I(9);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_ctrl__DOT__half = VL_RAND_RESET_I(9);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__state = VL_RAND_RESET_I(3);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__sum_re_r = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__sum_im_r = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_re_r = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__diff_im_r = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__w_re_r = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__w_im_r = VL_RAND_RESET_I(16);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m1_r = VL_RAND_RESET_I(32);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m2_r = VL_RAND_RESET_I(32);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__m3_r = VL_RAND_RESET_I(32);
-    vlSelf->fft2d_core__DOT__u_fft1d__DOT__u_bfly__DOT__mul_p = VL_RAND_RESET_I(32);
+    vlSelf->fft2d_core__DOT__unnamedblk6__DOT__unnamedblk7__DOT__row_l = VL_RAND_RESET_I(8);
+    vlSelf->fft2d_core__DOT__unnamedblk8__DOT__unnamedblk9__DOT__col_l = VL_RAND_RESET_I(8);
     vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__Vfuncout = VL_RAND_RESET_I(16);
     vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__r = VL_RAND_RESET_I(8);
     vlSelf->__Vfunc_fft2d_core__DOT__idx2d__0__c = VL_RAND_RESET_I(8);

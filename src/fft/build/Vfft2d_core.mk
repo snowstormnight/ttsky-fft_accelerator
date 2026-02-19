@@ -35,7 +35,7 @@ VM_PREFIX = Vfft2d_core
 VM_MODPREFIX = Vfft2d_core
 # User CFLAGS (from -CFLAGS on Verilator command line)
 VM_USER_CFLAGS = \
-	-std=c++17 -DFFT_N=256 -DFFT_LOGN=8 \
+	-std=c++17 -DFFT_N=256 -DFFT_LOGN=8 -DFFT_LANES=4 \
 
 # User LDLIBS (from -LDFLAGS on Verilator command line)
 VM_USER_LDLIBS = \

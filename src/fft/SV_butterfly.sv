@@ -4,7 +4,7 @@
 // Module: butterfly
 // -----------------------------------------------------------------------------
 // Purpose:
-// - Compute one radix-2 DIF butterfly operation on complex Q1.15 inputs.
+// - Compute one radix-2 DIF butterfly operation on complex 16 bits inputs, 1 bit for sign and 15 bits for fraction, normalized to the range [-1, 1).
 // - Architecture is area-first: one 16x16 multiplier is reused over time.
 //
 // Math implemented:
@@ -21,11 +21,8 @@
 // Timing model:
 // - start pulse accepted in S_IDLE.
 // - module runs 4 internal multiply steps (S_M1..S_M4).
-// - done pulses for one cycle when outputs become valid.
+// - send a final answer pulses for one cycle when outputs become valid.
 //
-// Notes on synthesizability:
-// - no real/dynamic types; all fixed-width logic.
-// - no latches (all combinational defaults are assigned).
 // -----------------------------------------------------------------------------
 module butterfly (
     input  logic                    clk,

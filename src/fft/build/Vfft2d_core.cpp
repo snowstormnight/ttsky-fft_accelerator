@@ -21,6 +21,10 @@ Vfft2d_core::Vfft2d_core(VerilatedContext* _vcontextp__, const char* _vcname__)
     , out_re{vlSymsp->TOP.out_re}
     , out_im{vlSymsp->TOP.out_im}
     , perf_cycles{vlSymsp->TOP.perf_cycles}
+    , __PVT__fft2d_core__DOT__g_fft__BRA__0__KET____DOT__u_fft1d{vlSymsp->TOP.__PVT__fft2d_core__DOT__g_fft__BRA__0__KET____DOT__u_fft1d}
+    , __PVT__fft2d_core__DOT__g_fft__BRA__1__KET____DOT__u_fft1d{vlSymsp->TOP.__PVT__fft2d_core__DOT__g_fft__BRA__1__KET____DOT__u_fft1d}
+    , __PVT__fft2d_core__DOT__g_fft__BRA__2__KET____DOT__u_fft1d{vlSymsp->TOP.__PVT__fft2d_core__DOT__g_fft__BRA__2__KET____DOT__u_fft1d}
+    , __PVT__fft2d_core__DOT__g_fft__BRA__3__KET____DOT__u_fft1d{vlSymsp->TOP.__PVT__fft2d_core__DOT__g_fft__BRA__3__KET____DOT__u_fft1d}
     , rootp{&(vlSymsp->TOP)}
 {
     // Register model with the context

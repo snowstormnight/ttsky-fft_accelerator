@@ -1,7 +1,7 @@
 # FFT Accelerator Architecture
 
 ## 1. Goal and Scope
-This folder implements a hardware-efficient 2D FFT accelerator in SystemVerilog using a **single reused 1D FFT datapath** style (TinyTapeout-friendly direction), plus a Verilator C++ driver and Python automation script.
+This folder implements a parameterized 2D FFT accelerator in SystemVerilog using **LANES parallel 1D FFT datapaths** (LANES=1 gives the original area-efficient mode), plus a Verilator C++ driver and Python automation script.
 
 Main verification flow:
 - Image (grayscale) -> Q1.15 -> hardware 2D FFT
@@ -23,11 +23,11 @@ Note: for N != 32, Python auto-generates `build/SV_twiddle_rom_auto.sv` and comp
 ## 3. Hardware Hierarchy
 `fft2d_core`
 - Contains two local memories (`mem0`, `mem1`) sized N*N complex samples
-- Instantiates **one** `fft1d_core`
+- Instantiates `LANES` copies of `fft1d_core`
 - Schedules:
   1. load full tile into `mem0`
-  2. row-wise 1D FFT: `mem0 -> fft1d -> mem1`
-  3. column-wise 1D FFT: `mem1 -> fft1d -> mem0`
+  2. row-wise 1D FFT in batches of `LANES` rows: `mem0 -> fft1d[] -> mem1`
+  3. column-wise 1D FFT in batches of `LANES` cols: `mem1 -> fft1d[] -> mem0`
   4. drain final bins from `mem0`
 
 `fft1d_core`
@@ -46,7 +46,9 @@ Note: for N != 32, Python auto-generates `build/SV_twiddle_rom_auto.sv` and comp
 - Uses one multiplier reused across 4 micro-steps
 - Applies per-stage `>>> 1` scaling
 
-## 4. Top I/O of `fft2d_core`
+## 4. External I/O Protocol 
+Top-level ports:
+
 Inputs:
 - `clk`, `rst_n`
 - `in_valid`, `in_re[15:0]`, `in_im[15:0]`
@@ -61,31 +63,37 @@ Outputs:
 Data format:
 - signed Q1.15 complex samples on input/output ports
 
-## 5. Expected I/O Behavior Over Time
-For one NxN block:
+One full block (`N x N`) works exactly like this:
 
-1. **Load phase**
-- `in_ready=1`, `out_valid=0`
-- Producer sends exactly N*N samples row-major
-- One sample accepted each cycle when `in_valid && in_ready`
+1. **Feed input block**
+- Wait until `in_ready=1`.
+- Drive samples in row-major order (natural order):
+  `(r=0,c=0) ... (r=0,c=N-1) ... (r=N-1,c=N-1)`.
+- For grayscale images: `in_re=pixel_q15`, `in_im=0`.
+- Keep `in_valid=1` while streaming.
+- Advance to next input sample only on handshake: `in_valid && in_ready`.
+- Exactly `N*N` input handshakes are required.
 
-2. **Compute phase**
-- `in_ready=0`, `out_valid=0`
-- Core internally runs row pass then column pass
-- No external data transfer
+2. **Wait for internal compute**
+- After the input block is fully accepted, set `in_valid=0`.
+- During compute: `in_ready=0`, `out_valid=0`.
+- Core runs row FFT batches then column FFT batches internally.
+- No external transfer in this phase.
 
-3. **Drain phase**
-- `in_ready=0`, `out_valid=1`
-- Consumer accepts exactly N*N complex bins with `out_ready`
+3. **Collect output block**
+- Set `out_ready=1` (or backpressure if needed).
+- When internal compute is complete, the core sets `out_valid=1` to indicate output data is ready to be drained.
+- When `out_valid && out_ready`, capture one complex output bin.
+- Exactly `N*N` output handshakes are produced.
+- Output stream order is row-major over a **bit-reversed-2D** spectrum.
+- Software can reorder to natural order with row and column bit-reversal.
 
-Then returns to load phase for next tile.
+4. **Block done / next block**
+- On final output handshake, `perf_done` pulses for one cycle.
+- `perf_cycles` holds full block latency (first accepted input -> last accepted output).
+- Core then returns to load mode (`in_ready=1`) for the next block.
 
-Ordering:
-- Input: natural row-major
-- Output: bit-reversed on both dimensions (DIF behavior)
-- Software can reorder using bit-reversal on rows and columns
-
-## 6. Performance Counter Meaning
+## 5. Performance Counter Meaning
 `perf_cycles` measures elapsed cycles from:
 - first accepted sample of a block
 through
@@ -93,13 +101,13 @@ through
 
 This gives full block latency including load, compute, and drain.
 
-## 7. Python/C++ Pipeline
+## 6. Python/C++ Pipeline
 Python script (`PY_test_image_generation.py`) does:
 1. Read all images from `image/`
 2. Choose nearest power-of-2 square size, capped by `--max-n` (default 256)
 3. Resize image to NxN grayscale
 4. Convert to Q1.15 and write `input_tile.txt` (one integer per line)
-5. Build Verilator model for N (if needed)
+5. Build Verilator model for `(N, LANES)` (if needed)
 6. Run C++ binary (`build/Vfft2d_core`) to generate `dut_fft_out.txt`
 7. Load hardware FFT output, reorder if `--order bitrev2d`
 8. Reconstruct via `ifft2(F_hw * (N*N))`
@@ -109,18 +117,45 @@ Python script (`PY_test_image_generation.py`) does:
    - `difference.png`
    - `metrics.txt` (max error, rmse, pass, perf_cycles)
 
-## 8. How To Run
+## 7. How To Run
 From `src/fft`:
 
 1. Put one or more grayscale images in `image/`
-2. Run:
+2. Run (example):
 ```bash
-python3 PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256
+python3 PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 4
 ```
 
 Outputs are under `results/<image_name>_N<resolved_size>/`.
 
-## 9. Constraints and Tradeoff Summary
-- This design is area-efficient by reusing one 1D FFT core and one butterfly datapath.
-- Throughput is lower than wide-parallel architectures.
-- This tradeoff is intentional for TinyTapeout-style feasibility.
+## 8. Constraints and Tradeoff Summary
+- `LANES=1` is the smallest-area baseline.
+- Higher `LANES` increases area and lowers latency (PPA tradeoff).
+- External I/O is still 1 complex sample per cycle; speedup comes from lower internal compute cycles.
+
+## 9. Why This FFT Accelerator Can Beat a CPU
+This design is stronger than a CPU implementation in several hardware-specific ways:
+
+1. **Deterministic throughput/latency**
+- The FFT runs as a fixed hardware schedule (FSM + streaming handshakes), not a software loop affected by OS scheduling, cache misses, or branch behavior.
+- For a fixed `(N, LANES)` and fixed handshakes, cycle count is repeatable (`perf_cycles`).
+
+2. **Specialized data path for FFT math**
+- The architecture directly maps radix-2 FFT operations into dedicated fixed-point hardware (butterfly + twiddle ROM + local memories).
+- No instruction fetch/decode overhead for each arithmetic step.
+
+3. **Parameterized parallelism**
+- `LANES` scales parallel 1D FFT engines in hardware.
+- `LANES=1` minimizes area; higher `LANES` lowers compute cycles significantly (measured in this project).
+- This gives an explicit area/performance tradeoff a general CPU core cannot match as cleanly.
+
+4. **Efficient streaming integration**
+- The block uses a clean producer/consumer interface (`in_valid/in_ready`, `out_valid/out_ready`), which fits larger accelerator pipelines well.
+- This is useful for FFT -> multiply -> IFFT chains without CPU-centric data marshaling at every operation.
+
+5. **Fixed-point efficiency**
+- Q1.15 arithmetic is compact and hardware-friendly, reducing logic cost and switching activity compared with floating-point software paths.
+
+Important tradeoff:
+- CPUs remain better for maximum flexibility and very small one-off problem sizes.
+- This accelerator is better when repeated FFT workloads justify specialized hardware and deterministic behavior.
