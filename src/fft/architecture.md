@@ -93,15 +93,7 @@ One full block (`N x N`) works exactly like this:
 - `perf_cycles` holds full block latency (first accepted input -> last accepted output).
 - Core then returns to load mode (`in_ready=1`) for the next block.
 
-## 5. Performance Counter Meaning
-`perf_cycles` measures elapsed cycles from:
-- first accepted sample of a block
-through
-- final accepted output sample of the same block
-
-This gives full block latency including load, compute, and drain.
-
-## 6. Python/C++ Pipeline
+## 5. Python/C++ Pipeline
 Python script (`PY_test_image_generation.py`) does:
 1. Read all images from `image/`
 2. Choose nearest power-of-2 square size, capped by `--max-n` (default 256)
@@ -117,7 +109,7 @@ Python script (`PY_test_image_generation.py`) does:
    - `difference.png`
    - `metrics.txt` (max error, rmse, pass, perf_cycles)
 
-## 7. How To Run
+## 6. How To Run
 From `src/fft`:
 
 1. Put one or more grayscale images in `image/`
@@ -126,12 +118,17 @@ From `src/fft`:
 python3 PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 4
 ```
 
-Outputs are under `results/<image_name>_N<resolved_size>/`.
+Outputs are under `results/<image_name>_N<resolved_size>_L<lanes>/`.
 
-## 8. Constraints and Tradeoff Summary
+## 7. Constraints and Tradeoff Summary
 - `LANES=1` is the smallest-area baseline.
 - Higher `LANES` increases area and lowers latency (PPA tradeoff).
 - External I/O is still 1 complex sample per cycle; speedup comes from lower internal compute cycles.
+
+## 8. Performance Reporting
+- `perf_done` pulses when one full block finishes.
+- `perf_cycles` reports full block cycles: first accepted input to last accepted output.
+- The Python pipeline stores this in `metrics.txt` per case.
 
 ## 9. Why This FFT Accelerator Can Beat a CPU
 This design is stronger than a CPU implementation in several hardware-specific ways:
