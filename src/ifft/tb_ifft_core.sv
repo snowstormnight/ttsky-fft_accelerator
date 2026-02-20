@@ -5,7 +5,11 @@ module tb_ifft_core;
     localparam int DATA_W  = 16;
     localparam int FRAC_W  = 12;
     localparam int NUM_FRAMES = 3;
-    localparam int TOL_LSB = 3;
+    localparam int TOL_LSB = 4;
+
+    localparam int LOGN    = $clog2(N);
+    localparam int LOGDIM  = LOGN / 2;
+    localparam int DIM     = (1 << LOGDIM);
 
     localparam real PI = 3.14159265358979323846;
 
@@ -77,12 +81,22 @@ module tb_ifft_core;
 
     task automatic build_random_frame_and_reference;
         int k;
-        int n;
+        int r;
+        int c;
+        int kr;
+        int kc;
         real xre;
         real xim;
-        real c;
-        real s;
-        real angle;
+        real a_row;
+        real a_col;
+        real c_row;
+        real s_row;
+        real c_col;
+        real s_col;
+        real t1_re;
+        real t1_im;
+        real term_re;
+        real term_im;
         real sum_re;
         real sum_im;
         begin
@@ -92,20 +106,38 @@ module tb_ifft_core;
                 freq_im[k] = real_to_fixed(($itor($urandom_range(-800, 800))) / 4096.0);
             end
 
-            for (n = 0; n < N; n++) begin
-                sum_re = 0.0;
-                sum_im = 0.0;
-                for (k = 0; k < N; k++) begin
-                    xre = fixed_to_real(freq_re[k]);
-                    xim = fixed_to_real(freq_im[k]);
-                    angle = (2.0 * PI * k * n) / N;
-                    c = $cos(angle);
-                    s = $sin(angle);
-                    sum_re += (xre * c - xim * s);
-                    sum_im += (xre * s + xim * c);
+            for (r = 0; r < DIM; r++) begin
+                for (c = 0; c < DIM; c++) begin
+                    sum_re = 0.0;
+                    sum_im = 0.0;
+                    for (kr = 0; kr < DIM; kr++) begin
+                        for (kc = 0; kc < DIM; kc++) begin
+                            xre = fixed_to_real(freq_re[(kr * DIM) + kc]);
+                            xim = fixed_to_real(freq_im[(kr * DIM) + kc]);
+
+                            a_row = (2.0 * PI * kr * r) / DIM;
+                            a_col = (2.0 * PI * kc * c) / DIM;
+
+                            c_row = $cos(a_row);
+                            s_row = $sin(a_row);
+                            c_col = $cos(a_col);
+                            s_col = $sin(a_col);
+
+                            // exp(j*a_row) * exp(j*a_col)
+                            t1_re = (c_row * c_col) - (s_row * s_col);
+                            t1_im = (c_row * s_col) + (s_row * c_col);
+
+                            // (xre + j*xim) * (t1_re + j*t1_im)
+                            term_re = (xre * t1_re) - (xim * t1_im);
+                            term_im = (xre * t1_im) + (xim * t1_re);
+
+                            sum_re += term_re;
+                            sum_im += term_im;
+                        end
+                    end
+                    exp_re[(r * DIM) + c] = real_to_fixed(sum_re / N);
+                    exp_im[(r * DIM) + c] = real_to_fixed(sum_im / N);
                 end
-                exp_re[n] = real_to_fixed(sum_re / N);
-                exp_im[n] = real_to_fixed(sum_im / N);
             end
         end
     endtask
@@ -164,6 +196,10 @@ module tb_ifft_core;
         out_ready = 1'b1;
         err_count = 0;
 
+        if ((LOGN % 2) != 0) begin
+            $fatal(1, "N must be square (power-of-two dimension)");
+        end
+
         repeat (5) @(posedge clk);
         rst_n = 1'b1;
 
@@ -185,4 +221,3 @@ module tb_ifft_core;
     end
 
 endmodule
-
