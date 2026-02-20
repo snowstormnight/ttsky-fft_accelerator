@@ -1,0 +1,37 @@
+# FFT->IFFT round-trip test flow
+
+# 1) Activate your project venv from repo root
+# source src/fft/.venv/bin/activate
+
+# 2) Go to this folder
+# cd src/fft_ifft
+
+# 3) Put one or more grayscale images into ./image
+
+# 4) Run
+python PY_fft_ifft_roundtrip.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 4 --ifft-frac-w 15 --ifft-data-w 32
+
+# Notes:
+# - ifft_core is treated as a full 2D IFFT block (one full frame per run).
+# - No host-side row/column IFFT decomposition is used.
+#
+# Optional parameters:
+# --images-dir <path>      Input folder with images (.png/.jpg/.jpeg/.bmp/.tif/.tiff)
+# --outdir <path>          Output root folder (per-image case folders are created inside)
+# --order <mode>           FFT output order interpretation: bitrev2d or natural
+# --max-n <int>            Max power-of-2 size used for resizing (default 256)
+# --lanes <int>            FFT parallel lanes, power-of-2 (default 1)
+# --ifft-data-w <int>      Override ifft_core DATA_W; default is 16
+# --ifft-frac-w <int>      ifft_core FRAC_W twiddle fractional bits (default 15)
+# --tol-max <float>        Pass threshold for max absolute error (default 2.0)
+# --tol-rmse <float>       Pass threshold for RMSE (default 0.02)
+
+# Generated outputs per image case:
+# - input_tile.txt       : Q1.15 image values sent into FFT
+# - dut_fft_out.txt      : raw FFT hardware output stream
+# - dut_fft_nat.txt      : reordered FFT bins (natural order) used for IFFT
+# - dut_ifft_out.txt     : IFFT hardware output stream
+# - original.png
+# - reconstructed.png
+# - difference.png
+# - metrics.txt

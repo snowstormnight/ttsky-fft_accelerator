@@ -1,0 +1,13 @@
+size=256
+lanes=4
+ifft_n_total=65536
+ifft_data_w=32
+ifft_frac_w=15
+ifft_input_prescale=65536
+ifft_input_clip_count=0
+order=bitrev2d
+max_abs_error=1.91116333e+00
+rmse=9.34196019e-03
+imag_rmse=9.42807959e-03
+pass=1
+fft_perf_cycles=1114367
