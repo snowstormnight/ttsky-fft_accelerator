@@ -1,5 +1,4 @@
 cd ~/project/ASIC_Hack/src/fft
 
 mkdir -p image
-python3 PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 1
-python3 PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 4
+python PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 4

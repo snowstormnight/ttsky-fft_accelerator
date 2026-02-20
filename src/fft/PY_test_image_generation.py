@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -133,14 +136,28 @@ def build_hw(repo_fft_dir: Path, n: int, lanes: int) -> Path:
     # Build or reuse Verilated binary for requested N.
     # Rebuild is triggered when previous (N,LANES) differs.
     logn = int(math.log2(n))
-    build_dir = repo_fft_dir / "build"
+    # Verilator's generated Makefiles fail when build directory path contains spaces.
+    # Keep build artifacts under /tmp to stay robust on paths like ".../ASIC Hack/...".
+    build_dir = Path(tempfile.gettempdir()) / "ttsky_fft_verilator_build"
     bin_path = build_dir / "Vfft2d_core"
     meta_path = build_dir / "fft_cfg.txt"
 
     if bin_path.exists() and meta_path.exists():
         prev_cfg = meta_path.read_text(encoding="utf-8").strip()
-        if prev_cfg == f"{n},{lanes}":
-            return bin_path
+        if prev_cfg == f"{n},{lanes}" and os.access(bin_path, os.X_OK):
+            # Validate binary is runnable on this host (reject stale foreign-arch artifacts).
+            try:
+                probe = subprocess.run(
+                    [str(bin_path)],
+                    cwd=repo_fft_dir,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if probe.returncode in (1, 2):
+                    return bin_path
+            except OSError:
+                pass
 
     if build_dir.exists():
         # Rebuild if target FFT size changed.
@@ -150,6 +167,18 @@ def build_hw(repo_fft_dir: Path, n: int, lanes: int) -> Path:
     build_dir.mkdir(parents=True, exist_ok=True)
     twiddle_auto = build_dir / "SV_twiddle_rom_auto.sv"
     generate_twiddle_rom(twiddle_auto, n)
+
+    # Stage RTL/testbench sources in the temp build folder so generated Makefiles
+    # do not depend on space-containing absolute paths.
+    staged_files = [
+        "SV_fft2d_core.sv",
+        "SV_fft1d_core.sv",
+        "SV_butterfly.sv",
+        "SV_fft_controller.sv",
+        "CPP_2d_fft_tb.cpp",
+    ]
+    for fname in staged_files:
+        shutil.copy2(repo_fft_dir / fname, build_dir / fname)
 
     # Verilator compile command:
     # - Parameterize SV top with -GN/-GLOGN/-GLANES
@@ -165,7 +194,7 @@ def build_hw(repo_fft_dir: Path, n: int, lanes: int) -> Path:
         "--top-module",
         "fft2d_core",
         "-Mdir",
-        str(build_dir.name),
+        str(build_dir),
         f"-GN={n}",
         f"-GLOGN={logn}",
         f"-GLANES={lanes}",
@@ -175,10 +204,10 @@ def build_hw(repo_fft_dir: Path, n: int, lanes: int) -> Path:
         "SV_fft1d_core.sv",
         "SV_butterfly.sv",
         "SV_fft_controller.sv",
-        str(twiddle_auto),
+        "SV_twiddle_rom_auto.sv",
         "CPP_2d_fft_tb.cpp",
     ]
-    subprocess.run(cmd, check=True, cwd=repo_fft_dir)
+    subprocess.run(cmd, check=True, cwd=build_dir)
     if not bin_path.exists():
         raise RuntimeError(f"build failed: {bin_path} not produced")
     meta_path.write_text(f"{n},{lanes}\n", encoding="utf-8")
