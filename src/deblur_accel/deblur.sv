@@ -42,12 +42,11 @@ module deblur #(
     localparam int IMG_LOGN = (IMG_N <= 1) ? 1 : $clog2(IMG_N);
 
     typedef enum logic [2:0] {
-        ST_LOAD_H    = 3'd0,
-        ST_LOAD_IMG  = 3'd1,
-        ST_WAIT_FFT  = 3'd2,
-        ST_FEED_IFFT = 3'd3,
-        ST_WAIT_OUT  = 3'd4,
-        ST_DONE      = 3'd5
+        ST_PRELOAD   = 3'd0,
+        ST_WAIT_FFT  = 3'd1,
+        ST_FEED_IFFT = 3'd2,
+        ST_WAIT_OUT  = 3'd3,
+        ST_DONE      = 3'd4
     } state_t;
 
     state_t st;
@@ -122,37 +121,39 @@ module deblur #(
         end
     endfunction
 
-    function automatic int nat_to_fft_raw(input int nat_idx);
+    function automatic logic [FFT_AW-1:0] fft_raw_to_nat(input logic [FFT_AW-1:0] raw_idx);
         int row;
         int col;
         int rr;
         int cc;
+        int idx_i;
         begin
-            row = nat_idx / IMG_N;
-            col = nat_idx % IMG_N;
+            row = raw_idx / IMG_N;
+            col = raw_idx % IMG_N;
             unique case (FFT_TO_IFFT_MAP)
                 0: begin
                     rr = bitrev_dim(row);
                     cc = bitrev_dim(col);
-                    nat_to_fft_raw = rr * IMG_N + cc;
+                    idx_i = rr * IMG_N + cc;
                 end
                 1: begin
-                    nat_to_fft_raw = nat_idx;
+                    idx_i = raw_idx;
                 end
                 2: begin
                     rr = bitrev_dim(col);
                     cc = bitrev_dim(row);
-                    nat_to_fft_raw = rr * IMG_N + cc;
+                    idx_i = rr * IMG_N + cc;
                 end
                 3: begin
-                    nat_to_fft_raw = col * IMG_N + row;
+                    idx_i = col * IMG_N + row;
                 end
                 default: begin
                     rr = bitrev_dim(row);
                     cc = bitrev_dim(col);
-                    nat_to_fft_raw = rr * IMG_N + cc;
+                    idx_i = rr * IMG_N + cc;
                 end
             endcase
+            fft_raw_to_nat = FFT_AW'(idx_i);
         end
     endfunction
 
@@ -180,25 +181,19 @@ module deblur #(
         end
     endfunction
 
-    assign fft_in_valid = (st == ST_LOAD_IMG) && img_valid;
-    assign img_ready    = (st == ST_LOAD_IMG) && fft_in_ready;
+    assign fft_in_valid = (st == ST_PRELOAD) && !img_loaded && img_valid;
+    assign img_ready    = (st == ST_PRELOAD) && !img_loaded && fft_in_ready;
     assign fft_in_re    = img_re;
     assign fft_in_im    = '0;
 
-    assign filt_valid_in = (st == ST_LOAD_H) && h_valid;
-    assign h_ready       = (st == ST_LOAD_H) && filt_ready_in;
-    assign filt_ready_out = (st == ST_LOAD_H);
+    assign filt_valid_in = (st == ST_PRELOAD) && !h_loaded && h_valid;
+    assign h_ready       = (st == ST_PRELOAD) && !h_loaded && filt_ready_in;
+    assign filt_ready_out = 1'b1;
 
     always_comb begin
-        int raw_idx;
-        raw_idx = 0;
-        if (!feed_done) begin
-            raw_idx = nat_to_fft_raw(feed_cnt);
-        end
-
         mult_in_valid = (st == ST_FEED_IFFT) && !feed_done;
-        mult_a_re     = y_re_mem[raw_idx];
-        mult_a_im     = y_im_mem[raw_idx];
+        mult_a_re     = y_re_mem[feed_cnt];
+        mult_a_im     = y_im_mem[feed_cnt];
         mult_b_re     = feed_done ? '0 : g_re_mem[feed_cnt];
         mult_b_im     = feed_done ? '0 : g_im_mem[feed_cnt];
     end
@@ -211,7 +206,7 @@ module deblur #(
     assign ifft_in_re = ifft_pre_re;
     assign ifft_in_im = ifft_pre_im;
 
-    assign fft_out_ready = (st == ST_LOAD_IMG) || (st == ST_WAIT_FFT);
+    assign fft_out_ready = (st == ST_PRELOAD) || (st == ST_WAIT_FFT);
     assign ifft_out_ready = out_ready;
 
     assign out_valid = ifft_out_valid;
@@ -302,7 +297,7 @@ module deblur #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            st         <= ST_LOAD_H;
+            st         <= ST_PRELOAD;
             h_in_cnt   <= '0;
             g_wr_cnt   <= '0;
             img_in_cnt <= '0;
@@ -330,8 +325,8 @@ module deblur #(
             end
 
             if (fft_out_valid && fft_out_ready && !fft_loaded) begin
-                y_re_mem[y_wr_cnt] <= $signed({{(DATA_W-FFT_W){fft_out_re[FFT_W-1]}}, fft_out_re});
-                y_im_mem[y_wr_cnt] <= $signed({{(DATA_W-FFT_W){fft_out_im[FFT_W-1]}}, fft_out_im});
+                y_re_mem[fft_raw_to_nat(y_wr_cnt)] <= $signed({{(DATA_W-FFT_W){fft_out_re[FFT_W-1]}}, fft_out_re});
+                y_im_mem[fft_raw_to_nat(y_wr_cnt)] <= $signed({{(DATA_W-FFT_W){fft_out_im[FFT_W-1]}}, fft_out_im});
                 if (y_wr_cnt == FFT_AW'(TOT - 1)) begin
                     y_wr_cnt <= y_wr_cnt;
                     fft_loaded <= 1'b1;
@@ -350,7 +345,7 @@ module deblur #(
             end
 
             case (st)
-                ST_LOAD_H: begin
+                ST_PRELOAD: begin
                     if (h_valid && h_ready && !h_loaded) begin
                         if (h_in_cnt == FFT_AW'(TOT - 1)) begin
                             h_in_cnt <= h_in_cnt;
@@ -359,11 +354,8 @@ module deblur #(
                         end
                     end
                     if (h_loaded) begin
-                        st <= ST_LOAD_IMG;
+                        h_in_cnt <= h_in_cnt;
                     end
-                end
-
-                ST_LOAD_IMG: begin
                     if (img_valid && img_ready && !img_loaded) begin
                         if (img_in_cnt == FFT_AW'(TOT - 1)) begin
                             img_in_cnt <= img_in_cnt;
@@ -372,8 +364,12 @@ module deblur #(
                             img_in_cnt <= img_in_cnt + 1'b1;
                         end
                     end
-                    if (img_loaded) begin
-                        st <= ST_WAIT_FFT;
+                    if (h_loaded && img_loaded) begin
+                        if (fft_loaded) begin
+                            st <= ST_FEED_IFFT;
+                        end else begin
+                            st <= ST_WAIT_FFT;
+                        end
                     end
                 end
 

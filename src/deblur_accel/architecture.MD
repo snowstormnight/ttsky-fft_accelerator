@@ -299,3 +299,21 @@ Software orchestration:
 
 Single C++ testbench for top:
 - `CPP_deblur_stage_tb.cpp` (instantiates `Vdeblur` only)
+
+## 6) Implemented Architecture Optimizations
+
+- Overlapped input preload:
+  - `H(u,v)` stream and image stream can now be accepted in the same top-level preload phase (`ST_PRELOAD`), instead of strict serial loading.
+  - This improves I/O utilization and reduces frame startup latency.
+
+- Write-time FFT reorder:
+  - FFT output is reordered into natural indexing when written into internal frame memory.
+  - This removes per-cycle bit-reversal address computation from the feed path to multiplier/IFFT, simplifying critical datapath addressing.
+
+- Streamlined feed path:
+  - Multiplier feed now uses sequential natural-order addressing for both `Y(u,v)` and `G(u,v)`.
+  - Lower control/address complexity improves determinism and timing closure behavior.
+
+- Candidate bank search for realistic deployment behavior:
+  - Software-side PSF bank + `K` bank search with no-reference sharpness selection (`selection_metric=sharpness`) is integrated.
+  - This mimics deployment-ready blur-model selection strategy and avoids manual per-image PSF tuning.

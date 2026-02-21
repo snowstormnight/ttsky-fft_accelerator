@@ -301,6 +301,10 @@ def process_one(
         best_imag_rmse = 0.0
         best_fft_cycles = None
 
+        total_cases = len(deblur_psf_sigmas) * len(fft_to_ifft_maps) * len(pre_ifft_shifts) * len(k_values)
+        case_idx = 0
+        print(f"[{img_path.name}] evaluate {total_cases} candidates", flush=True)
+
         for deblur_sigma_try in deblur_psf_sigmas:
             deblur_psf = gaussian_psf(n, psf_kernel, deblur_sigma_try)
             h_c = np.fft.fft2(deblur_psf)
@@ -326,6 +330,13 @@ def process_one(
                     calib_b = float(coef[1])
 
                     for k_try in k_values:
+                        case_idx += 1
+                        if case_idx == 1 or (case_idx % max(1, total_cases // 10) == 0) or case_idx == total_cases:
+                            print(
+                                f"[{img_path.name}] progress {case_idx}/{total_cases} "
+                                f"(sigma={deblur_sigma_try:.3f}, map={map_try}, shift={shift_try}, k={k_try})",
+                                flush=True,
+                            )
                         run = subprocess.run([str(bin_path), str(in_txt), str(h_txt), str(out_txt), str(k_try)], check=True, text=True, capture_output=True)
                         fft_cycles = parse_perf_cycles(run.stdout)
 
