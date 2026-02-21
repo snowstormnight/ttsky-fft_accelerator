@@ -16,19 +16,23 @@ Q = 32768.0
 
 
 def load_gray(path: Path) -> np.ndarray:
+    # Load an image from disk and convert it to 8-bit grayscale.
     return np.asarray(Image.open(path).convert("L"), dtype=np.uint8)
 
 
 def save_png(path: Path, img_u8: np.ndarray) -> None:
+    # Save an 8-bit grayscale numpy array as a PNG image.
     Image.fromarray(img_u8.astype(np.uint8), mode="L").save(path)
 
 
 def resize_square(img: np.ndarray, n: int) -> np.ndarray:
+    # Resize an image to a square N x N shape with bilinear filtering.
     resampling = getattr(Image, "Resampling", Image)
     return np.asarray(Image.fromarray(img).resize((n, n), resampling.BILINEAR), dtype=np.uint8)
 
 
 def nearest_pow2(x: int) -> int:
+    # Return the nearest power-of-two value for an integer dimension.
     if x <= 1:
         return 2
     lo = 1 << int(math.floor(math.log2(x)))
@@ -37,6 +41,7 @@ def nearest_pow2(x: int) -> int:
 
 
 def parse_complex_tile(path: Path, n: int) -> np.ndarray:
+    # Parse a text file of complex samples into an (N, N, 2) tile.
     raw = np.loadtxt(path, dtype=np.int64)
     if raw.ndim == 1:
         raw = raw.reshape(1, -1)
@@ -46,10 +51,12 @@ def parse_complex_tile(path: Path, n: int) -> np.ndarray:
 
 
 def write_complex_tile(path: Path, x: np.ndarray) -> None:
+    # Write an (N, N, 2) complex tile to a two-column text file.
     np.savetxt(path, x.reshape(-1, 2), fmt="%d")
 
 
 def parse_perf_cycles(stdout: str) -> int | None:
+    # Extract FFT performance cycle count from simulator stdout text.
     for ln in stdout.splitlines():
         p = ln.strip().split()
         if len(p) == 2 and p[0] == "PERF_CYCLES":
@@ -61,10 +68,12 @@ def parse_perf_cycles(stdout: str) -> int | None:
 
 
 def is_pow2(x: int) -> bool:
+    # Check if a positive integer is a power of two.
     return x > 0 and (x & (x - 1)) == 0
 
 
 def resolve_lanes_for_n(req_lanes: int, n: int) -> int:
+    # Resolve a valid lane count that divides N, reducing from request if needed.
     lanes = min(max(1, req_lanes), n)
     while lanes > 1 and (n % lanes != 0):
         lanes //= 2
@@ -72,6 +81,7 @@ def resolve_lanes_for_n(req_lanes: int, n: int) -> int:
 
 
 def _is_runnable(bin_path: Path) -> bool:
+    # Verify a cached binary exists, is executable, and launches successfully.
     if not bin_path.exists() or not os.access(bin_path, os.X_OK):
         return False
     try:
@@ -82,9 +92,11 @@ def _is_runnable(bin_path: Path) -> bool:
 
 
 def generate_twiddle_rom(path: Path, n: int) -> None:
+    # Generate a SystemVerilog twiddle ROM file for an N-point FFT.
     logn = int(math.log2(n))
 
     def sv16(v: int) -> str:
+        # Format signed constants in SystemVerilog 16-bit literal syntax.
         return f"-16'sd{abs(v)}" if v < 0 else f"16'sd{v}"
 
     lines = [
@@ -124,6 +136,7 @@ def generate_twiddle_rom(path: Path, n: int) -> None:
 
 
 def gaussian_psf(n: int, kernel: int, sigma: float) -> np.ndarray:
+    # Build an FFT-aligned 2D Gaussian point-spread function.
     if kernel % 2 == 0:
         kernel += 1
     ax = np.arange(-(kernel // 2), kernel // 2 + 1)
@@ -138,12 +151,14 @@ def gaussian_psf(n: int, kernel: int, sigma: float) -> np.ndarray:
 
 
 def blur_with_psf(x_q15: np.ndarray, psf: np.ndarray) -> np.ndarray:
+    # Blur a Q1.15 image using FFT-domain convolution with the provided PSF.
     x = x_q15.astype(np.float64) / Q
     y = np.real(np.fft.ifft2(np.fft.fft2(x) * np.fft.fft2(psf)))
     return np.clip(np.round(y * Q), -32768, 32767).astype(np.int16)
 
 
 def sharpness_score(x: np.ndarray) -> float:
+    # Score image sharpness using variance of the discrete Laplacian response.
     # No-reference sharpness metric: variance of discrete Laplacian response.
     c = x
     u = np.roll(x, 1, axis=0)
@@ -155,6 +170,7 @@ def sharpness_score(x: np.ndarray) -> float:
 
 
 def u8_to_q15(img_u8: np.ndarray) -> np.ndarray:
+    # Convert uint8 grayscale image values into signed Q1.15 samples.
     x = np.clip((img_u8.astype(np.float64) - 128.0) / 128.0, -1.0, 0.999969)
     return np.clip(np.round(x * Q), -32768, 32767).astype(np.int16)
 
@@ -171,6 +187,7 @@ def build_deblur_hw(
     pre_ifft_shift: int,
     fft_to_ifft_map: int,
 ) -> Path:
+    # Build or reuse a parameter-matched Verilator executable for deblur.sv.
     build_dir = Path(tempfile.gettempdir()) / "ttsky_deblur_top_build"
     bin_path = build_dir / "Vdeblur"
     meta = build_dir / "cfg.txt"
@@ -242,6 +259,7 @@ def process_one(
     improve_tolerance: float,
     selection_metric: str,
 ) -> tuple[str, float, float, float, int | None, int, int, int, float]:
+    # Run one full blur/deblur hardware experiment and emit outputs plus metrics.
     img = load_gray(img_path)
     if img_n is not None:
         if not is_pow2(img_n):
@@ -410,6 +428,7 @@ def process_one(
 
 
 def main() -> int:
+    # Parse CLI arguments and run the end-to-end deblur pipeline on all images.
     p = argparse.ArgumentParser(description="Deblur pipeline with one hardware top module (deblur.sv).")
     p.add_argument("--images-dir", type=Path, default=Path("image"))
     p.add_argument("--outdir", type=Path, default=Path("results"))

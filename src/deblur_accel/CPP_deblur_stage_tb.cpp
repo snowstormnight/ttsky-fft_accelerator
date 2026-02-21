@@ -26,6 +26,7 @@ struct Cx {
 };
 
 bool parse_real_file(const std::string& path, std::vector<int32_t>& v, int n) {
+  // Parse N signed integer samples from a text file.
   std::ifstream fin(path);
   if (!fin) return false;
   v.assign(n, 0);
@@ -39,6 +40,7 @@ bool parse_real_file(const std::string& path, std::vector<int32_t>& v, int n) {
 }
 
 bool parse_complex_file(const std::string& path, std::vector<Cx>& v, int n) {
+  // Parse N complex integer samples (re im per line) from a text file.
   std::ifstream fin(path);
   if (!fin) return false;
   v.assign(n, {0, 0});
@@ -54,6 +56,7 @@ bool parse_complex_file(const std::string& path, std::vector<Cx>& v, int n) {
 }
 
 bool write_complex_file(const std::string& path, const std::vector<Cx>& v) {
+  // Write complex integer samples to a text file as "re im" lines.
   std::ofstream fout(path);
   if (!fout) return false;
   for (const auto& x : v) fout << x.re << " " << x.im << "\n";
@@ -61,12 +64,14 @@ bool write_complex_file(const std::string& path, const std::vector<Cx>& v) {
 }
 
 uint32_t pack_s(int32_t x, int w) {
+  // Pack a signed value into a w-bit two's-complement unsigned field.
   if (w >= 32) return static_cast<uint32_t>(x);
   const uint64_t mask = (1ULL << w) - 1ULL;
   return static_cast<uint32_t>(static_cast<uint64_t>(x) & mask);
 }
 
 int32_t sx_u(uint32_t x, int w) {
+  // Sign-extend a w-bit unsigned field into a 32-bit signed integer.
   if (w >= 32) return static_cast<int32_t>(x);
   const uint32_t mask = (1u << w) - 1u;
   x &= mask;
@@ -77,6 +82,7 @@ int32_t sx_u(uint32_t x, int w) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // Drive the deblur top in simulation: feed image/H streams and collect outputs.
   if (argc != 5) {
     std::cerr << "usage: " << argv[0]
               << " <in_blur_real.txt> <h_in_complex.txt> <out_complex.txt> <k>\n";
