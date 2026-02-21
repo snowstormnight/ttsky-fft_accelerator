@@ -300,20 +300,378 @@ Software orchestration:
 Single C++ testbench for top:
 - `CPP_deblur_stage_tb.cpp` (instantiates `Vdeblur` only)
 
-## 6) Implemented Architecture Optimizations
+### 5.1) `deblur.sv` (Top Integrator)
 
-- Overlapped input preload:
-  - `H(u,v)` stream and image stream can now be accepted in the same top-level preload phase (`ST_PRELOAD`), instead of strict serial loading.
-  - This improves I/O utilization and reduces frame startup latency.
+Path: `src/deblur_accel/deblur.sv`
 
-- Write-time FFT reorder:
-  - FFT output is reordered into natural indexing when written into internal frame memory.
-  - This removes per-cycle bit-reversal address computation from the feed path to multiplier/IFFT, simplifying critical datapath addressing.
+Code sections:
+- Lines 1-54:
+  - Module header, top-level architecture intent, parameters, and all external I/O.
+  - Defines system-level configuration knobs (`IMG_N`, `FFT_LANES`, width/scaling parameters, mapping mode).
+- Lines 56-95:
+  - Core localparams, top FSM enum (`ST_PRELOAD`, `ST_WAIT_FFT`, `ST_FEED_IFFT`, `ST_WAIT_OUT`, `ST_DONE`), frame memories, counters, and completion flags.
+  - Declares frame-level storage for FFT bins (`y_*`) and Wiener outputs (`g_*`).
+- Lines 96-134:
+  - Interconnect signal declarations between submodules (FFT, FilterGen, multiplier, IFFT).
+  - Separates ingress, processing, and egress handshake/datapath signals.
+- Lines 136-147:
+  - `bitrev_dim` helper function.
+  - Reverses row/column bits for index remapping.
+- Lines 149-184:
+  - `fft_raw_to_nat` mapping function.
+  - Converts FFT stream order to stored index order according to `FFT_TO_IFFT_MAP`.
+- Lines 186-209:
+  - `sat_shift_left_pow2` function.
+  - Pre-IFFT gain shift with explicit overflow saturation.
+- Lines 211-247:
+  - Combinational handshake and datapath wiring.
+  - Binds top I/O to submodule streams; constructs multiplier inputs from frame memories; applies optional pre-IFFT scaling.
+- Lines 249-328:
+  - Submodule instantiations:
+  - `fft2d_core`, `FilterGen`, `complex_mult`, `ifft_core`.
+  - Parameter propagation from top-level into each block.
+- Lines 330-381:
+  - Sequential bookkeeping for frame capture and output drain.
+  - Writes `G(u,v)` memory, writes reordered FFT memory, tracks output completion.
+- Lines 383-451:
+  - Main frame FSM behavior.
+  - Coordinates preload overlap, FFT wait, multiplier/IFFT feed, output drain, and done pulse generation.
+- Lines 452-457:
+  - End of module.
 
-- Streamlined feed path:
-  - Multiplier feed now uses sequential natural-order addressing for both `Y(u,v)` and `G(u,v)`.
-  - Lower control/address complexity improves determinism and timing closure behavior.
+### 5.2) `fft2d_core` (2D FFT Engine)
 
-- Candidate bank search for realistic deployment behavior:
-  - Software-side PSF bank + `K` bank search with no-reference sharpness selection (`selection_metric=sharpness`) is integrated.
-  - This mimics deployment-ready blur-model selection strategy and avoids manual per-image PSF tuning.
+Path: `src/fft/SV_fft2d_core.sv`
+
+Code sections:
+- Lines 1-36:
+  - Module purpose, interface, and performance outputs.
+  - Defines narrow streaming contract (one complex sample per cycle externally).
+- Lines 38-57:
+  - Local parameters, FSM enum, working memories (`mem0`, `mem1`), and batch counters.
+  - `mem0` serves as input/final output buffer; `mem1` stores row-pass intermediate.
+- Lines 59-61:
+  - `idx2d` helper to flatten `(row,col)` into memory index.
+- Lines 63-75:
+  - Lane-level stream arrays and performance counter signals.
+- Lines 76-92:
+  - Generate loop instantiating `LANES` copies of `fft1d_core`.
+  - This is where throughput parallelism is physically created.
+- Lines 94-157:
+  - Combinational stage behavior per FSM state.
+  - Routes row batches into 1D FFT lanes, receives row results, routes column batches, and drives drain output.
+- Lines 159-180:
+  - Sequential reset and performance-cycle counting.
+  - Starts counting at first accepted input sample, stops at final accepted output.
+- Lines 182-197:
+  - `ST_LOAD`: loads full `N*N` frame into memory.
+- Lines 199-234:
+  - `ST_ROW_FEED` and `ST_ROW_RECV`: first FFT pass across rows in lane batches.
+- Lines 236-270:
+  - `ST_COL_FEED` and `ST_COL_RECV`: second FFT pass across columns in lane batches.
+- Lines 272-289:
+  - `ST_DRAIN`: streams completed FFT frame out and asserts perf completion.
+- Lines 293-295:
+  - End of module.
+
+### 5.3) `FilterGen` (Wiener Gain Generator)
+
+Path: `src/wiener_filter/wiener_filter.v`
+
+Code sections:
+- Lines 1-30:
+  - Module header and Wiener equation contract.
+  - Defines fixed-point interpretation for `H`, `K`, and `G`.
+- Lines 32-36:
+  - Internal width planning for multiply/add/divide path.
+  - Protects precision in denominator and quotient math.
+- Lines 37:
+  - Backpressure relation `ready_in = ~valid_out | ready_out`.
+- Lines 39-50:
+  - Internal signals for `|H|^2`, denominator, numerators, and quotients.
+- Lines 51-67:
+  - `sat_to_data` helper clamps quotient result to output width.
+- Lines 69-92:
+  - Core combinational Wiener math:
+  - compute `|H|^2`, align `K`, build safe denominator, construct scaled numerators, perform signed division for `G_real/G_imag`.
+- Lines 94-109:
+  - Output register stage with valid/ready handshake.
+  - Latches saturated `G` outputs only when downstream can accept.
+- Lines 110:
+  - End of module.
+
+### 5.4) `complex_mult` (Frequency-Domain Complex Multiply)
+
+Path: `src/mult/complex_mult.sv`
+
+Code sections:
+- Lines 1-38:
+  - Module header and configurable compute style (Gauss 3-mult vs standard 4-mult), optional pipeline, and handshake.
+- Lines 40-46:
+  - Local width calculations (`SUM_W`, `MUL_W`, `ACC_W`) for safe intermediate arithmetic.
+- Lines 47-65:
+  - `sat_to_out_w` helper for saturation into output width.
+- Lines 67-86:
+  - `round_and_shift` helper to normalize fixed-point products back to `FRAC`.
+- Lines 88-92:
+  - Declares combinational lane outputs.
+- Lines 93-165:
+  - Per-lane combinational compute (generate loop):
+  - unpack lane inputs, compute complex product (3-mult or 4-mult), scale/round, then saturate or wrap.
+- Lines 167-195:
+  - Optional 1-stage ready/valid output register (`PIPE1=1`).
+  - Decouples combinational path and supports backpressure.
+- Lines 196-202:
+  - Pure combinational pass-through mode (`PIPE1=0`).
+- Lines 204:
+  - End of module.
+
+### 5.5) `ifft_core` (2D IFFT Engine)
+
+Path: `src/ifft/ifft_core.sv`
+
+Code sections:
+- Lines 1-48:
+  - Module intent and streaming interfaces.
+  - Declares two-pass 2D IFFT strategy for square tiles.
+- Lines 49-72:
+  - Geometry and width derivation plus parameter legality checks.
+  - Enforces `N` power-of-two and square decomposition constraints.
+- Lines 74-99:
+  - FSM states and frame memories (`mem_*`, `buf_*`) plus twiddle ROM arrays.
+- Lines 101-115:
+  - Global counters/iterators and saturation bounds.
+- Lines 117-128:
+  - Bit-reversal function for per-dimension DIT ordering.
+- Lines 130-166:
+  - Saturation helpers (`sat_to_core`, `sat_to_data`).
+- Lines 168-192:
+  - Constant quantization and final `1/N` scaling helpers.
+- Lines 194-203:
+  - Twiddle constant initialization.
+- Lines 205-229:
+  - Combinational output logic:
+  - drives `in_ready/out_valid/out_last`, computes transposed output addressing, applies final scale/saturation.
+- Lines 231-283:
+  - Sequential engine prologue:
+  - reset behavior and temporary arithmetic variable declarations.
+- Lines 285-309:
+  - `ST_LOAD`: input frame ingest with bit-reversed write layout.
+- Lines 311-380:
+  - `ST_CALC_PASS1`: row-wise in-place butterfly compute and stage/group iteration.
+- Lines 382-410:
+  - `ST_TRANSPOSE`: transposes pass1 result into second-pass buffer with bit-reversed preparation.
+- Lines 412-481:
+  - `ST_CALC_PASS2`: second in-place butterfly pass over transposed data.
+- Lines 483-500:
+  - `ST_OUT`: output drain, frame completion pulse, and state reset.
+- Lines 510-513:
+  - End of module.
+
+## 6) Connection And Control Logic (How Data Moves)
+
+This section is a pure description of how modules are connected and what control idea each module uses.
+
+### 6.0) Computer-Architecture Style Used
+
+The design is a **streaming DSP accelerator** built from these architecture patterns:
+
+- **Synchronous streaming dataflow with backpressure**
+  - Every boundary uses `valid/ready`, so producers and consumers decouple cleanly.
+- **Tile-level scratchpad memory**
+  - Full-frame local memories (`y_*`, `g_*`, `mem0/mem1`, `mem/buf`) are used instead of cache.
+  - This gives deterministic access and predictable cycle behavior.
+- **FSM-orchestrated phase execution**
+  - Each major block uses explicit states for load/compute/drain.
+  - This is a control-centric architecture, not an out-of-order or speculative model.
+- **Time-multiplexed arithmetic datapaths**
+  - `butterfly` and pass engines reuse arithmetic hardware across many indices.
+  - Saves area while keeping deterministic throughput.
+- **Lane-parallel batching**
+  - `fft2d_core` replicates multiple 1D cores (`LANES`) to increase throughput in parallel batches.
+  - Similar to SIMD lane scaling but implemented as structural RTL replication.
+
+### 6.1) Top-Level Connection (`deblur.sv`)
+
+- `img_*` stream is connected to `fft2d_core` input.
+- `h_*` + `k_cfg` stream is connected to `FilterGen` input.
+- `fft2d_core` output is written into frame memory `y_*`.
+- `FilterGen` output is written into frame memory `g_*`.
+- During feed phase, the same index reads `y_*` and `g_*` and sends them into `complex_mult`.
+- `complex_mult` output is optionally shifted/scaled, then connected to `ifft_core` input.
+- `ifft_core` output is connected directly to `out_*`.
+
+Top-level control idea:
+- A frame-level FSM controls when each connection is active:
+  - preload inputs,
+  - wait for FFT completion,
+  - feed multiplier/IFFT,
+  - drain output.
+- Counters track how many samples have moved through each interface.
+
+Top-level FSM detail:
+- `ST_PRELOAD`
+  - Accepts image stream (`img_*`) and `H` stream (`h_*`) concurrently.
+  - Simultaneously captures FFT output bins as they become available.
+  - Exit condition: both image frame and `H` frame fully accepted.
+- `ST_WAIT_FFT`
+  - Used when preload completed before FFT drain completed.
+  - Only waits for `fft_loaded` flag.
+- `ST_FEED_IFFT`
+  - Reads one aligned bin from `y_*` and `g_*` per accepted multiplier handshake.
+  - Sends multiplier output to IFFT input.
+  - Exit condition: all frame bins fed (`feed_done`).
+- `ST_WAIT_OUT`
+  - Drains IFFT output stream and counts accepted output samples.
+  - Exit condition: full frame observed on output (`out_done`).
+- `ST_DONE`
+  - Completion indication state (done pulse behavior) before next frame.
+
+### 6.2) `fft2d_core`: 2D Scheduler Around Multiple 1D Cores
+
+Connection structure:
+- `fft2d_core` instantiates `LANES` copies of `fft1d_core`.
+- `mem0` and `mem1` are the shared frame memories:
+  - `mem0`: initial load and final output,
+  - `mem1`: row-pass intermediate.
+
+Control logic idea:
+- A 2D FSM schedules movement between memory and 1D cores:
+  - `ST_LOAD`: fill `mem0`,
+  - `ST_ROW_FEED/RECV`: run row pass,
+  - `ST_COL_FEED/RECV`: run column pass,
+  - `ST_DRAIN`: stream final FFT bins.
+- `batch_base` selects which row/column group is currently assigned to the lane group.
+- `feed_cnt/recv_cnt` coordinate lane lockstep so all lanes advance together.
+
+Architecture interpretation:
+- This is a **blocked two-pass transform engine** with explicit **producer/consumer phases**.
+- Row and column passes are spatially separated by scratchpad storage (`mem1`), which is a classic transpose-buffer style organization.
+- Lane lockstep means deterministic wavefront progression across the tile.
+
+### 6.3) `fft1d_core`: Single-Engine 1D FFT Wrapper
+
+Connection structure:
+- `fft1d_core` connects three internal blocks:
+  - `fft_controller` (schedule generator),
+  - `twiddle_rom` (twiddle source),
+  - `butterfly` (compute datapath).
+- Local sample memory stores one 1D vector in place.
+
+Control logic idea:
+- A small FSM (`ST_LOAD`, `ST_RUN`, `ST_OUT`) governs the full vector lifecycle.
+- In `ST_RUN`, `fft_controller` emits `(idx_a, idx_b, tw_idx)` for each butterfly.
+- `butterfly` computes one pair; results are written back in-place.
+- When controller signals done, module drains outputs via stream interface.
+
+FSM detail:
+- `ST_LOAD`: exactly `N` samples are accepted into local RAM.
+- `ST_RUN`: no external stream traffic; compute is driven by controller/butterfly handshake until all stages complete.
+- `ST_OUT`: exactly `N` bins are emitted; then state returns to `ST_LOAD`.
+
+Architecture interpretation:
+- This is a **microcoded-like loop engine** where schedule (controller) and datapath (butterfly) are separated.
+- In-place memory update reduces memory footprint and external bandwidth demand.
+
+### 6.4) `fft_controller`: Pair/Stage Scheduler
+
+What it controls:
+- It does not compute arithmetic.
+- It only generates the address and twiddle sequence for radix-2 DIF execution.
+
+Control logic idea:
+- Nested-loop logic is implemented in registers/counters:
+  - `stage` (FFT stage),
+  - `base` (group base index),
+  - `j` (position inside group).
+- For each issued butterfly:
+  - outputs `idx_a`, `idx_b`, `tw_idx`,
+  - waits for `bfly_done`,
+  - advances to next `(j/base/stage)` state.
+- When final stage/group/pair is done, it raises `done`.
+
+Architecture interpretation:
+- This module is the **sequencer/scheduler plane** of the FFT.
+- Equivalent to translating three nested software loops into a hardware control machine with one operation in flight at a time.
+
+### 6.5) `butterfly`: Arithmetic Compute Micro-Engine
+
+What it does:
+- Performs radix-2 butterfly arithmetic on one complex pair.
+- Computes:
+  - sum/diff scaling,
+  - twiddle complex multiply on the diff path.
+
+Control logic idea:
+- Uses a short internal FSM to reuse a small multiplier over multiple sub-steps.
+- `start` begins operation; `done` pulses when outputs are ready.
+- This is compute-focused logic, while ordering/scheduling comes from controller.
+
+FSM detail:
+- `S_IDLE`: latches input pair and twiddle.
+- `S_M1..S_M4`: computes partial products sequentially.
+- Final cycle assembles complex result, applies scaling/saturation, and asserts `done`.
+
+Architecture interpretation:
+- This is a **time-multiplexed arithmetic unit** (area-efficient MAC reuse).
+- It trades cycles per butterfly for reduced multiplier count.
+
+### 6.6) `FilterGen`: Wiener Coefficient Generator
+
+Connection structure:
+- Receives streamed `H_real/H_imag` and scalar `K`.
+- Outputs streamed `G_real/G_imag`.
+- Uses ready/valid handshake so it can be backpressured by downstream.
+
+Control logic idea:
+- Arithmetic is mostly combinational (`|H|^2`, denominator, divide).
+- A registered output stage provides handshake-stable streaming behavior.
+- Main role in pipeline is to transform blur model bins into per-bin Wiener gains.
+
+Architecture interpretation:
+- This behaves like a **streaming functional unit** with one-sample-at-a-time transform.
+- Registering output is a small pipeline cut for timing and protocol stability.
+
+### 6.7) `complex_mult`: Frequency-Domain Element-Wise Multiply
+
+Connection structure:
+- Takes aligned `Y(u,v)` and `G(u,v)` bins.
+- Emits `Yf(u,v)` bins to IFFT.
+- Optional internal pipeline register isolates backpressure.
+
+Control logic idea:
+- Per lane, computes complex multiplication (3-mult or 4-mult path).
+- Applies fixed-point scaling/rounding/saturation policy.
+- Handshake logic controls whether data is purely combinational or one-stage buffered.
+
+Architecture interpretation:
+- This is an **element-wise vector arithmetic stage** in the frequency-domain stream.
+- Optional pipeline register is a classic **throughput/timing decoupling** technique.
+
+### 6.8) `ifft_core`: 2D Inverse Transform Reconstructor
+
+Connection structure:
+- Receives filtered frequency bins from `complex_mult`.
+- Performs two-pass 2D IFFT using internal memories (`mem_*`, `buf_*`).
+- Streams reconstructed spatial-domain samples to `out_*`.
+
+Control logic idea:
+- Main FSM controls:
+  - input load,
+  - pass-1 compute,
+  - transpose,
+  - pass-2 compute,
+  - output drain.
+- Internal counters (`row/stage/group/j`) implement butterfly traversal for each pass.
+- Final scaling (`1/N`) is applied at output stage.
+
+FSM detail:
+- `ST_LOAD`: captures one full frequency tile.
+- `ST_CALC_PASS1`: runs row-wise inverse FFT butterflies over all rows.
+- `ST_TRANSPOSE`: reorganizes memory layout for second pass.
+- `ST_CALC_PASS2`: runs second set of butterflies (equivalent to column inverse FFT).
+- `ST_OUT`: emits reconstructed spatial tile with final fixed-point scale.
+
+Architecture interpretation:
+- This is another **two-pass transform engine with explicit transpose stage**.
+- It mirrors FFT engine principles but applies inverse twiddle/sign and final normalization.
