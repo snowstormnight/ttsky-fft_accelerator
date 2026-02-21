@@ -1,3 +1,28 @@
+// -----------------------------------------------------------------------------
+// Module: ifft_core
+// -----------------------------------------------------------------------------
+// Streaming 2D IFFT core for square tiles where N = DIM*DIM and DIM is power-of-2.
+//
+// Processing flow:
+// 1) ST_LOAD:
+//    - Accept N frequency-domain bins.
+//    - Store each row in bit-reversed order for DIT traversal.
+// 2) ST_CALC_PASS1:
+//    - Run in-place 1D IFFT on each row (complex butterflies, twiddle multiply).
+// 3) ST_TRANSPOSE:
+//    - Transpose pass-1 result into buf_* and apply bit-reversed row indexing
+//      for second pass DIT traversal.
+// 4) ST_CALC_PASS2:
+//    - Run in-place 1D IFFT on transposed rows (equivalent to column pass).
+// 5) ST_OUT:
+//    - Stream out scaled spatial samples with final transpose addressing.
+//
+// Fixed-point behavior:
+// - Internal width CORE_W has guard bits for growth.
+// - Twiddles are DATA_W fixed-point values with FRAC_W fractional bits.
+// - Final output scales by 1/N (implemented as arithmetic right-shift by LOGN).
+// - Saturation is applied when narrowing to CORE_W and DATA_W.
+// -----------------------------------------------------------------------------
 module ifft_core #(
     parameter int N       = 64,
     parameter int DATA_W  = 16,
@@ -21,16 +46,19 @@ module ifft_core #(
 
     output logic                         frame_done
 );
+    // LOGN: log2(total points), LOGDIM: log2(side dimension), DIM: side length.
     localparam int LOGN   = $clog2(N);
     localparam int LOGDIM = LOGN / 2;
     localparam int DIM    = (1 << LOGDIM);
 
+    // Internal arithmetic widths sized for safe intermediate headroom.
     localparam int CORE_W = DATA_W + LOGN + 2;      // internal growth guard bits
     localparam int MUL_W  = CORE_W + DATA_W;        // v(core) * w(data)
     localparam int LONG_W = MUL_W + 4;
 
     localparam real PI = 3.14159265358979323846;
 
+    // Synthesis-time parameter checks.
     initial begin
         if ((1 << LOGN) != N) begin
             $error("ifft_core: N (%0d) must be a power of 2", N);
@@ -44,18 +72,25 @@ module ifft_core #(
     end
 
     typedef enum logic [2:0] {
+        // Load full frame from input stream.
         ST_LOAD      = 3'd0,
+        // First 1D IFFT pass over rows.
         ST_CALC_PASS1= 3'd1,
+        // Transpose intermediate frame for second pass.
         ST_TRANSPOSE = 3'd2,
+        // Second 1D IFFT pass (transposed rows => original columns).
         ST_CALC_PASS2= 3'd3,
+        // Stream final spatial-domain frame to output.
         ST_OUT       = 3'd4
     } state_t;
 
     state_t state;
 
+    // Main working memories for in-place passes.
     logic signed [CORE_W-1:0] mem_re [0:N-1];
     logic signed [CORE_W-1:0] mem_im [0:N-1];
 
+    // Transpose/intermediate buffer between pass 1 and pass 2.
     logic signed [CORE_W-1:0] buf_re [0:N-1];
     logic signed [CORE_W-1:0] buf_im [0:N-1];
 
@@ -79,6 +114,7 @@ module ifft_core #(
     localparam logic signed [DATA_W-1:0] DATA_MAX = {1'b0, {(DATA_W-1){1'b1}}};
     localparam logic signed [DATA_W-1:0] DATA_MIN = {1'b1, {(DATA_W-1){1'b0}}};
 
+    // Bit-reverse helper over one DIM-sized axis.
     function automatic int bit_reverse_dim(input int value);
         int b;
         int r;
@@ -91,6 +127,7 @@ module ifft_core #(
         end
     endfunction
 
+    // Saturate wide intermediates into CORE_W internal range.
     function automatic logic signed [CORE_W-1:0] sat_to_core(
         input logic signed [LONG_W-1:0] x
     );
@@ -109,6 +146,7 @@ module ifft_core #(
         end
     endfunction
 
+    // Saturate wide intermediates into DATA_W output range.
     function automatic logic signed [DATA_W-1:0] sat_to_data(
         input logic signed [LONG_W-1:0] x
     );
@@ -127,6 +165,7 @@ module ifft_core #(
         end
     endfunction
 
+    // Quantize real-valued constants (twiddles) into DATA_W fixed-point.
     function automatic logic signed [DATA_W-1:0] quant_real_to_fixed(input real x);
         int tmp;
         begin
@@ -141,6 +180,7 @@ module ifft_core #(
         end
     endfunction
 
+    // Final 1/N scaling for IFFT output with saturation to DATA_W.
     function automatic logic signed [DATA_W-1:0] scale_ifft(
         input logic signed [CORE_W-1:0] x
     );
@@ -151,6 +191,7 @@ module ifft_core #(
         end
     endfunction
 
+    // Twiddle ROM initialization for one DIM-point inverse FFT kernel.
     integer ti;
     real angle;
     initial begin
@@ -161,10 +202,15 @@ module ifft_core #(
         end
     end
 
+    // Streaming interface behavior and output addressing.
     always_comb begin
         int out_row;
         int out_col;
         int out_mem_idx;
+
+        out_row = 0;
+        out_col = 0;
+        out_mem_idx = 0;
 
         in_ready  = (state == ST_LOAD);
         out_valid = (state == ST_OUT);
@@ -182,6 +228,7 @@ module ifft_core #(
         end
     end
 
+    // Main sequential engine for 2-pass in-place 2D IFFT.
     always_ff @(posedge clk or negedge rst_n) begin
         int wr_row;
         int wr_col;
@@ -237,7 +284,7 @@ module ifft_core #(
             case (state)
                 ST_LOAD: begin
                     if (in_valid && in_ready) begin
-                        // For pass-1 DIT, bit-reverse each row's input index.
+                        // For pass-1 DIT, store each row at bit-reversed column index.
                         wr_row = load_cnt / DIM;
                         wr_col = bit_reverse_dim(load_cnt % DIM);
                         wr_idx = (wr_row * DIM) + wr_col;
@@ -262,6 +309,7 @@ module ifft_core #(
                 end
 
                 ST_CALC_PASS1: begin
+                    // In-place row-wise DIT butterfly update on mem_*.
                     row_off = row_idx * DIM;
                     idx_a   = row_off + k_base + j_idx;
                     idx_b   = idx_a + half;
@@ -326,7 +374,7 @@ module ifft_core #(
                 end
 
                 ST_TRANSPOSE: begin
-                    // Build pass-2 input in bit-reversed order per row after transpose.
+                    // Transpose and bit-reverse row index to prepare pass-2 DIT layout.
                     tr_row = trans_cnt / DIM;
                     tr_col = trans_cnt % DIM;
                     tr_idx = (tr_col * DIM) + bit_reverse_dim(tr_row);
@@ -350,6 +398,7 @@ module ifft_core #(
                 end
 
                 ST_CALC_PASS2: begin
+                    // In-place second pass on buf_* (equivalent to column IFFT).
                     row_off = row_idx * DIM;
                     idx_a   = row_off + k_base + j_idx;
                     idx_b   = idx_a + half;
@@ -414,6 +463,7 @@ module ifft_core #(
                 end
 
                 ST_OUT: begin
+                    // Output one sample per accepted handshake; pulse frame_done on last.
                     if (out_valid && out_ready) begin
                         if (out_idx == N-1) begin
                             state      <= ST_LOAD;

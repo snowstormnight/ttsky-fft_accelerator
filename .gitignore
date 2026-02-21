@@ -1,5 +1,11 @@
 .DS_Store
 .idea
+.venv/
+venv/
+.vnev/
+**/.venv/
+**/venv/
+**/.vnev/
 *.vcd
 *.fst
 *.fst.hier

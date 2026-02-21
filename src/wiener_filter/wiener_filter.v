@@ -1,10 +1,19 @@
 `timescale 1ns/1ps
 
 // Wiener-only filter generator:
-// W(u,v) = H*(u,v) / (|H(u,v)|^2 + K)
+//   G(u,v) = H*(u,v) / (|H(u,v)|^2 + K)
+//
+// Fixed-point model:
+// - H_real/H_imag are signed Q(DATA_WIDTH-FRAC_W).FRAC_W
+// - K is unsigned Q(DATA_WIDTH-FRAC_W).FRAC_W
+// - G_real/G_imag are signed Q(DATA_WIDTH-FRAC_W).FRAC_W
+//
+// Internal math keeps |H|^2 in Q(2*FRAC_W), then computes exact fixed-point divide:
+//   G_int = (H_int << (2*FRAC_W)) / (|H|^2_int + (K_int << FRAC_W))
 module FilterGen #(
-    parameter int DATA_WIDTH     = 16,
-    parameter int LUT_ADDR_WIDTH = 8,
+    parameter int DATA_WIDTH     = 24,
+    parameter int FRAC_W         = 15,
+    parameter int LUT_ADDR_WIDTH = 8,  // reserved for interface compatibility
     parameter int K_SHIFT        = 0
 ) (
     input  logic                           clk,
@@ -20,60 +29,66 @@ module FilterGen #(
     output logic signed [DATA_WIDTH-1:0]   G_imag
 );
 
-    localparam int WIDE_WIDTH = 2 * DATA_WIDTH;
-    localparam int LUT_DEPTH  = (1 << LUT_ADDR_WIDTH);
+    localparam int MUL_W   = 2 * DATA_WIDTH;
+    localparam int DEN_W   = MUL_W + FRAC_W + 2;
+    localparam int NUM_W   = DATA_WIDTH + (2 * FRAC_W) + 2;
+    localparam int QUOT_W  = (NUM_W > DEN_W) ? (NUM_W + 1) : (DEN_W + 1);
 
-    // Output register is one entry deep; this keeps handshake robust with small area.
     assign ready_in = ~valid_out | ready_out;
 
-    logic signed [WIDE_WIDTH-1:0] h_real_sq;
-    logic signed [WIDE_WIDTH-1:0] h_imag_sq;
-    logic signed [WIDE_WIDTH-1:0] mag2;
-    logic signed [WIDE_WIDTH-1:0] denom;
-    logic        [LUT_ADDR_WIDTH-1:0] lut_addr;
-    logic signed [DATA_WIDTH-1:0] recip;
-    logic signed [WIDE_WIDTH-1:0] g_real_wide;
-    logic signed [WIDE_WIDTH-1:0] g_imag_wide;
+    logic signed [MUL_W-1:0] h_real_sq;
+    logic signed [MUL_W-1:0] h_imag_sq;
+    logic signed [DEN_W-1:0] mag2_q2f;
+    logic signed [DEN_W-1:0] denom_q2f;
+    logic signed [DEN_W-1:0] denom_safe;
 
-    // Small reciprocal LUT avoids a divider and keeps area down.
-    logic [DATA_WIDTH-1:0] recip_lut [0:LUT_DEPTH-1];
-    initial begin : init_recip_lut
-        int i;
-        int recip_q;
-        int num_q;
-        int den_i;
-        int max_pos;
-        num_q   = (1 << (DATA_WIDTH - 1));      // Q1.15 scale for DATA_WIDTH=16
-        max_pos = (1 << (DATA_WIDTH - 1)) - 1;  // max signed value
-        for (i = 0; i < LUT_DEPTH; i++) begin
-            den_i = i + 1;
-            // Rounded fixed-point reciprocal: round((1/den_i) * 2^(DATA_WIDTH-1)).
-            recip_q = (num_q + (den_i >> 1)) / den_i;
-            // Saturate to signed positive range (avoid 32768 -> negative wrap in 16-bit signed).
-            if (recip_q > max_pos) recip_q = max_pos;
-            recip_lut[i] = recip_q[DATA_WIDTH-1:0];
+    logic signed [NUM_W-1:0] num_real;
+    logic signed [NUM_W-1:0] num_imag;
+
+    logic signed [QUOT_W-1:0] q_real;
+    logic signed [QUOT_W-1:0] q_imag;
+
+    function automatic logic signed [DATA_WIDTH-1:0] sat_to_data(
+        input logic signed [QUOT_W-1:0] x
+    );
+        logic signed [QUOT_W-1:0] max_ext;
+        logic signed [QUOT_W-1:0] min_ext;
+        begin
+            max_ext = $signed({{(QUOT_W-DATA_WIDTH){1'b0}}, {1'b0, {(DATA_WIDTH-1){1'b1}}}});
+            min_ext = $signed({{(QUOT_W-DATA_WIDTH){1'b1}}, {1'b1, {(DATA_WIDTH-1){1'b0}}}});
+            if (x > max_ext) begin
+                sat_to_data = {1'b0, {(DATA_WIDTH-1){1'b1}}};
+            end else if (x < min_ext) begin
+                sat_to_data = {1'b1, {(DATA_WIDTH-1){1'b0}}};
+            end else begin
+                sat_to_data = x[DATA_WIDTH-1:0];
+            end
         end
-    end
+    endfunction
 
     always_comb begin
-        h_real_sq = H_real * H_real;
-        h_imag_sq = H_imag * H_imag;
-        mag2      = h_real_sq + h_imag_sq;
-        denom     = mag2 + ($signed({{DATA_WIDTH{1'b0}}, K}) <<< K_SHIFT);
-        
-        // Use denominator magnitude directly as LUT index, clamped to table range.
-        // This keeps small denominators accurate (e.g., denom=5 -> lut[5] ~= 0.2 in Q1.15).
-        if (denom <= 0) begin
-            lut_addr = '0;
-        end else if (denom >= LUT_DEPTH) begin
-            lut_addr = LUT_DEPTH-1;
-        end else begin
-            lut_addr = denom[LUT_ADDR_WIDTH-1:0];
-        end
-        recip     = $signed(recip_lut[lut_addr]);
+        h_real_sq = $signed(H_real) * $signed(H_real);
+        h_imag_sq = $signed(H_imag) * $signed(H_imag);
 
-        g_real_wide = H_real * recip;
-        g_imag_wide = (-H_imag) * recip;
+        // |H|^2 in Q(2*FRAC_W)
+        mag2_q2f = $signed({{(DEN_W-MUL_W){h_real_sq[MUL_W-1]}}, h_real_sq})
+                 + $signed({{(DEN_W-MUL_W){h_imag_sq[MUL_W-1]}}, h_imag_sq});
+
+        // K in Q(FRAC_W) -> align to Q(2*FRAC_W)
+        denom_q2f = mag2_q2f + ($signed({{(DEN_W-DATA_WIDTH){1'b0}}, K}) <<< (FRAC_W + K_SHIFT));
+
+        if (denom_q2f <= 0) begin
+            denom_safe = 1;
+        end else begin
+            denom_safe = denom_q2f;
+        end
+
+        // Numerators aligned for output Q(FRAC_W): shift by 2*FRAC_W before divide.
+        num_real = $signed(H_real) <<< (2 * FRAC_W);
+        num_imag = $signed(-H_imag) <<< (2 * FRAC_W);
+
+        q_real = $signed(num_real) / $signed(denom_safe);
+        q_imag = $signed(num_imag) / $signed(denom_safe);
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -85,9 +100,8 @@ module FilterGen #(
             if (ready_in) begin
                 valid_out <= valid_in;
                 if (valid_in) begin
-                    // Keep scaling cheap: truncate to output width.
-                    G_real <= g_real_wide[DATA_WIDTH-1:0];
-                    G_imag <= g_imag_wide[DATA_WIDTH-1:0];
+                    G_real <= sat_to_data(q_real);
+                    G_imag <= sat_to_data(q_imag);
                 end
             end
         end

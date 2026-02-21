@@ -1,57 +1,65 @@
 # Tiny Tapeout project information
 project:
-  title:        ""      # Project title
-  author:       ""      # Your name
-  discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  ""      # One line description of what your project does
-  language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
+  title:        "TTSky Deblur Accelerator"
+  author:       "snows"
+  discord:      ""
+  description:  "FFT->Wiener->ComplexMult->IFFT grayscale deblur accelerator wrapper for Tiny Tapeout."
+  language:     "SystemVerilog"
+  clock_hz:     50000000
 
   # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "1x1"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  tiles: "8x2"
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
-  top_module:  "tt_um_example"
+  top_module:  "tt_um_ttsky_deblur_accel"
 
   # List your project's source files here.
   # Source files must be in ./src and you must list each source file separately, one per line.
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
-    - "project.v"
-    - "complex_mult.sv"
+    - "tt_um_fft_accelerator.v"
+    - "deblur_accel/deblur.sv"
+    - "fft/SV_fft2d_core.sv"
+    - "fft/SV_fft1d_core.sv"
+    - "fft/SV_fft_controller.sv"
+    - "fft/SV_butterfly.sv"
+    - "fft/SV_twiddle_rom.sv"
+    - "wiener_filter/wiener_filter.v"
+    - "mult/complex_mult.sv"
+    - "ifft/ifft_core.sv"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
   # Inputs
-  ui[0]: ""
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
-  ui[5]: ""
-  ui[6]: ""
-  ui[7]: ""
+  ui[0]: "img_valid"
+  ui[1]: "h_valid"
+  ui[2]: "out_ready"
+  ui[3]: "cfg/ui_data[3]"
+  ui[4]: "cfg/ui_data[4]"
+  ui[5]: "cfg/ui_data[5]"
+  ui[6]: "cfg/ui_data[6]"
+  ui[7]: "cfg/ui_data[7]"
 
   # Outputs
-  uo[0]: ""
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  uo[0]: "img_ready"
+  uo[1]: "h_ready"
+  uo[2]: "out_valid"
+  uo[3]: "out_last"
+  uo[4]: "done"
+  uo[5]: "fft_perf_done"
+  uo[6]: "out_re_lsb"
+  uo[7]: "out_im_lsb"
 
   # Bidirectional pins
-  uio[0]: ""
-  uio[1]: ""
-  uio[2]: ""
-  uio[3]: ""
-  uio[4]: ""
-  uio[5]: ""
-  uio[6]: ""
-  uio[7]: ""
+  uio[0]: "data_in[0]"
+  uio[1]: "data_in[1]"
+  uio[2]: "data_in[2]"
+  uio[3]: "data_in[3]"
+  uio[4]: "data_in[4]"
+  uio[5]: "data_in[5]"
+  uio[6]: "data_in[6]"
+  uio[7]: "data_in[7]"
 
 # Do not change!
 yaml_version: 6
