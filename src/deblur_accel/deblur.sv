@@ -1,36 +1,53 @@
 `default_nettype none
 `timescale 1ns/1ps
 
+// Top-level deblur accelerator:
+// image -> FFT2D -> Wiener filter generation -> complex multiply -> IFFT2D.
+// One IMG_N x IMG_N frame is buffered and processed per run.
 module deblur #(
+    // Tile side length.
     parameter int IMG_N      = 256,
+    // log2(IMG_N), forwarded to FFT.
     parameter int FFT_LOGN   = 8,
+    // Number of parallel 1D FFT lanes in fft2d_core.
     parameter int FFT_LANES  = 4,
+    // Internal datapath width for filter/mult/IFFT.
     parameter int DATA_W     = 24,
+    // Fractional bits for filter/IFFT fixed-point domain.
     parameter int FRAC_W     = 15,
+    // Fractional bits used by complex multiplier normalization.
     parameter int MULT_FRAC  = 15,
+    // 1 enables output saturation in complex multiplier.
     parameter int MULT_SAT   = 1,
+    // Optional gain shift before IFFT input.
     parameter int PRE_IFFT_SHIFT = 0,
+    // FFT output index mapping mode into natural-frequency storage.
     parameter int FFT_TO_IFFT_MAP = 0
 ) (
+    // Clock/reset.
     input  logic                         clk,
     input  logic                         rst_n,
 
+    // Image input stream (real-valued grayscale samples).
     input  logic                         img_valid,
     output logic                         img_ready,
     input  logic signed [15:0]           img_re,
 
+    // Frequency-response input stream for Wiener block.
     input  logic                         h_valid,
     output logic                         h_ready,
     input  logic signed [DATA_W-1:0]     h_re,
     input  logic signed [DATA_W-1:0]     h_im,
     input  logic        [DATA_W-1:0]     k_cfg,
 
+    // Deblurred output stream.
     output logic                         out_valid,
     input  logic                         out_ready,
     output logic signed [DATA_W-1:0]     out_re,
     output logic signed [DATA_W-1:0]     out_im,
     output logic                         out_last,
 
+    // Status/performance.
     output logic                         done,
     output logic                         fft_perf_done,
     output logic [63:0]                  fft_perf_cycles
@@ -42,15 +59,22 @@ module deblur #(
     localparam int IMG_LOGN = (IMG_N <= 1) ? 1 : $clog2(IMG_N);
 
     typedef enum logic [2:0] {
+        // Accept/capture image and H in parallel; capture FFT outputs.
         ST_PRELOAD   = 3'd0,
+        // Image/H done, but still waiting remaining FFT bins.
         ST_WAIT_FFT  = 3'd1,
+        // Feed Y(u,v)*G(u,v) into IFFT.
         ST_FEED_IFFT = 3'd2,
+        // Drain IFFT output stream.
         ST_WAIT_OUT  = 3'd3,
+        // Completion pulse state.
         ST_DONE      = 3'd4
     } state_t;
 
     state_t st;
 
+    // Frame memories:
+    // g_* stores Wiener output G(u,v); y_* stores FFT(image) bins.
     logic signed [DATA_W-1:0] g_re_mem [0:TOT-1];
     logic signed [DATA_W-1:0] g_im_mem [0:TOT-1];
     logic signed [DATA_W-1:0] y_re_mem [0:TOT-1];
@@ -109,6 +133,7 @@ module deblur #(
     logic ifft_out_last;
     logic ifft_frame_done;
 
+    // Bit-reverse helper over one IMG_N dimension.
     function automatic int bitrev_dim(input int value);
         int b;
         int r;
@@ -121,6 +146,7 @@ module deblur #(
         end
     endfunction
 
+    // Convert FFT stream order to selected storage order for IFFT feeding.
     function automatic logic [FFT_AW-1:0] fft_raw_to_nat(input logic [FFT_AW-1:0] raw_idx);
         int row;
         int col;
@@ -157,6 +183,7 @@ module deblur #(
         end
     endfunction
 
+    // Left-shift with saturation to keep pre-IFFT scaling bounded.
     function automatic logic signed [DATA_W-1:0] sat_shift_left_pow2(
         input logic signed [DATA_W-1:0] x,
         input int unsigned sh
@@ -181,16 +208,19 @@ module deblur #(
         end
     endfunction
 
+    // Handshake coupling for FFT preload path.
     assign fft_in_valid = (st == ST_PRELOAD) && !img_loaded && img_valid;
     assign img_ready    = (st == ST_PRELOAD) && !img_loaded && fft_in_ready;
     assign fft_in_re    = img_re;
     assign fft_in_im    = '0;
 
+    // Handshake coupling for Wiener preload path.
     assign filt_valid_in = (st == ST_PRELOAD) && !h_loaded && h_valid;
     assign h_ready       = (st == ST_PRELOAD) && !h_loaded && filt_ready_in;
     assign filt_ready_out = 1'b1;
 
     always_comb begin
+        // Read aligned Y and G bins for one complex multiply per cycle.
         mult_in_valid = (st == ST_FEED_IFFT) && !feed_done;
         mult_a_re     = y_re_mem[feed_cnt];
         mult_a_im     = y_im_mem[feed_cnt];
@@ -198,6 +228,7 @@ module deblur #(
         mult_b_im     = feed_done ? '0 : g_im_mem[feed_cnt];
     end
 
+    // Optional pre-IFFT gain compensation (power-of-two scaling).
     assign ifft_pre_re = sat_shift_left_pow2(mult_y_re, PRE_IFFT_SHIFT);
     assign ifft_pre_im = sat_shift_left_pow2(mult_y_im, PRE_IFFT_SHIFT);
 
@@ -206,6 +237,7 @@ module deblur #(
     assign ifft_in_re = ifft_pre_re;
     assign ifft_in_im = ifft_pre_im;
 
+    // Keep consuming FFT output while preloading and wait phase.
     assign fft_out_ready = (st == ST_PRELOAD) || (st == ST_WAIT_FFT);
     assign ifft_out_ready = out_ready;
 
@@ -295,6 +327,7 @@ module deblur #(
         .frame_done(ifft_frame_done)
     );
 
+    // Main control/FSM and full-frame bookkeeping.
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             st         <= ST_PRELOAD;
@@ -313,6 +346,7 @@ module deblur #(
         end else begin
             done <= 1'b0;
 
+            // Capture full G(u,v) frame from Wiener stream.
             if (filt_valid_out && filt_ready_out && !h_loaded) begin
                 g_re_mem[g_wr_cnt] <= filt_g_re;
                 g_im_mem[g_wr_cnt] <= filt_g_im;
@@ -324,6 +358,7 @@ module deblur #(
                 end
             end
 
+            // Capture FFT frame and reorder indices as configured.
             if (fft_out_valid && fft_out_ready && !fft_loaded) begin
                 y_re_mem[fft_raw_to_nat(y_wr_cnt)] <= $signed({{(DATA_W-FFT_W){fft_out_re[FFT_W-1]}}, fft_out_re});
                 y_im_mem[fft_raw_to_nat(y_wr_cnt)] <= $signed({{(DATA_W-FFT_W){fft_out_im[FFT_W-1]}}, fft_out_im});
@@ -335,6 +370,7 @@ module deblur #(
                 end
             end
 
+            // Count outgoing IFFT samples until full tile is drained.
             if (ifft_out_valid && ifft_out_ready && !out_done) begin
                 if (out_cnt == FFT_AW'(TOT - 1)) begin
                     out_cnt <= out_cnt;
@@ -346,6 +382,7 @@ module deblur #(
 
             case (st)
                 ST_PRELOAD: begin
+                    // Accept both preload streams; transition once both loaded.
                     if (h_valid && h_ready && !h_loaded) begin
                         if (h_in_cnt == FFT_AW'(TOT - 1)) begin
                             h_in_cnt <= h_in_cnt;
@@ -374,12 +411,14 @@ module deblur #(
                 end
 
                 ST_WAIT_FFT: begin
+                    // Wait for remaining FFT bins if preload finished early.
                     if (fft_loaded) begin
                         st <= ST_FEED_IFFT;
                     end
                 end
 
                 ST_FEED_IFFT: begin
+                    // Feed all bins through complex multiply into IFFT.
                     if (mult_in_valid && mult_in_ready && !feed_done) begin
                         if (feed_cnt == FFT_AW'(TOT - 1)) begin
                             feed_cnt <= feed_cnt;
@@ -394,6 +433,7 @@ module deblur #(
                 end
 
                 ST_WAIT_OUT: begin
+                    // Wait until all IFFT outputs are accepted downstream.
                     if (out_done) begin
                         st <= ST_DONE;
                         done <= 1'b1;
@@ -401,6 +441,7 @@ module deblur #(
                 end
 
                 ST_DONE: begin
+                    // One-cycle completion indication.
                     done <= 1'b1;
                 end
 
