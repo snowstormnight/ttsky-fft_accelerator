@@ -1,7 +1,6 @@
 /* verilator lint_off WIDTHEXPAND */
 /* verilator lint_off UNUSEDSIGNAL */
 `default_nettype none
-`timescale 1ns/1ps
 
 // Top-level deblur accelerator:
 // image -> FFT2D -> Wiener filter generation -> complex multiply -> IFFT2D.
