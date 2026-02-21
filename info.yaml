@@ -5,7 +5,7 @@ project:
   discord:      ""
   description:  "FFT->Wiener->ComplexMult->IFFT grayscale deblur accelerator wrapper for Tiny Tapeout."
   language:     "SystemVerilog"
-  clock_hz:     10000000
+  clock_hz:     30000000
 
   # How many tiles your design occupies? A single tile is about 167x108 uM.
   tiles: "8x2"
