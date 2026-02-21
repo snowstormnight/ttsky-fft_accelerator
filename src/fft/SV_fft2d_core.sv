@@ -1,5 +1,6 @@
 /* verilator lint_off DECLFILENAME */
 `default_nettype none
+`timescale 1ns/1ps
 
 // -----------------------------------------------------------------------------
 // Module: fft2d_core

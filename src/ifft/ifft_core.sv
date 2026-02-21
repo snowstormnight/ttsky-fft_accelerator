@@ -1,5 +1,6 @@
 /* verilator lint_off WIDTHEXPAND */
 /* verilator lint_off UNUSEDSIGNAL */
+`timescale 1ns/1ps
 // -----------------------------------------------------------------------------
 // Module: ifft_core
 // -----------------------------------------------------------------------------

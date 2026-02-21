@@ -7,6 +7,7 @@
 /* verilator lint_off TIMESCALEMOD */
 /* verilator lint_off UNUSEDSIGNAL */
 `default_nettype none
+`timescale 1ns/1ps
 
 module tt_um_ttsky_deblur_accel (
     input  wire [7:0] ui_in,    // Dedicated inputs
