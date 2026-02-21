@@ -84,7 +84,7 @@ Command-line parameters in `PY_deblur_pipeline.py`, grouped by what they control
   - Default: unset (auto from `IMG_N`)
 
 - `--lanes`
-  - Number of parallel FFT lanes (`FFT_LANES`).
+  - Number of 1d fft compute modules created (`FFT_LANES`).
   - Higher lanes can improve throughput at higher area cost.
   - Must be power-of-two and divide selected `N`.
   - Default: `4`
