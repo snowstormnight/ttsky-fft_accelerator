@@ -212,9 +212,8 @@ module fft2d_core #(
         ST_ROW_RECV: begin
           if (recv_fire) begin
             for (int l = 0; l < LANES; l++) begin
-              idx_t row_l = batch_base + idx_t'(l);
-              mem1_re[idx2d(row_l, recv_cnt)] <= f_out_re[l];
-              mem1_im[idx2d(row_l, recv_cnt)] <= f_out_im[l];
+              mem1_re[idx2d(batch_base + idx_t'(l), recv_cnt)] <= f_out_re[l];
+              mem1_im[idx2d(batch_base + idx_t'(l), recv_cnt)] <= f_out_im[l];
             end
 
             if (recv_cnt == idx_t'(N - 1)) begin
@@ -249,9 +248,8 @@ module fft2d_core #(
         ST_COL_RECV: begin
           if (recv_fire) begin
             for (int l = 0; l < LANES; l++) begin
-              idx_t col_l = batch_base + idx_t'(l);
-              mem0_re[idx2d(recv_cnt, col_l)] <= f_out_re[l];
-              mem0_im[idx2d(recv_cnt, col_l)] <= f_out_im[l];
+              mem0_re[idx2d(recv_cnt, batch_base + idx_t'(l))] <= f_out_re[l];
+              mem0_im[idx2d(recv_cnt, batch_base + idx_t'(l))] <= f_out_im[l];
             end
 
             if (recv_cnt == idx_t'(N - 1)) begin
