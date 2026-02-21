@@ -1,3 +1,4 @@
+/* verilator lint_off DECLFILENAME */
 `default_nettype none
 
 // -----------------------------------------------------------------------------
@@ -176,4 +177,5 @@ module fft1d_core #(
 
 endmodule
 
+/* verilator lint_on DECLFILENAME */
 `default_nettype wire

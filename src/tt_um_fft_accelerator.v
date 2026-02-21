@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* verilator lint_off DECLFILENAME */
+/* verilator lint_off TIMESCALEMOD */
+/* verilator lint_off UNUSEDSIGNAL */
 `default_nettype none
 
 module tt_um_ttsky_deblur_accel (
@@ -94,3 +97,7 @@ module tt_um_ttsky_deblur_accel (
   wire _unused = &{ena, fft_perf_cycles[63:0], 1'b0};
 
 endmodule
+
+/* verilator lint_on UNUSEDSIGNAL */
+/* verilator lint_on TIMESCALEMOD */
+/* verilator lint_on DECLFILENAME */

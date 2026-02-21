@@ -3,29 +3,30 @@
 
 module tb();
 
+  // Tiny Tapeout wrapper interface signals (driven by cocotb).
+  reg  [7:0] ui_in;
+  wire [7:0] uo_out;
+  reg  [7:0] uio_in;
+  wire [7:0] uio_out;
+  wire [7:0] uio_oe;
+  reg        ena;
+  reg        clk;
+  reg        rst_n;
+
   initial begin
     $dumpfile("tb.fst");
     $dumpvars(0, tb);
-    #1;
   end
 
-  // Inputs to DUT (driven by cocotb)
-  reg  signed [15:0] a_re;
-  reg  signed [15:0] a_im;
-  reg  signed [15:0] b_re;
-  reg  signed [15:0] b_im;
-
-  // Outputs from DUT (checked by cocotb)
-  wire signed [15:0] y_re;
-  wire signed [15:0] y_im;
-
-  complex_mult #(.W(16)) dut (
-    .a_re(a_re),
-    .a_im(a_im),
-    .b_re(b_re),
-    .b_im(b_im),
-    .y_re(y_re),
-    .y_im(y_im)
+  tt_um_ttsky_deblur_accel dut (
+    .ui_in(ui_in),
+    .uo_out(uo_out),
+    .uio_in(uio_in),
+    .uio_out(uio_out),
+    .uio_oe(uio_oe),
+    .ena(ena),
+    .clk(clk),
+    .rst_n(rst_n)
   );
 
 endmodule

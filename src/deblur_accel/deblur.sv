@@ -1,3 +1,5 @@
+/* verilator lint_off WIDTHEXPAND */
+/* verilator lint_off UNUSEDSIGNAL */
 `default_nettype none
 `timescale 1ns/1ps
 
@@ -454,4 +456,6 @@ module deblur #(
 
 endmodule
 
+/* verilator lint_on UNUSEDSIGNAL */
+/* verilator lint_on WIDTHEXPAND */
 `default_nettype wire

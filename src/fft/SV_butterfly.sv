@@ -1,3 +1,4 @@
+/* verilator lint_off DECLFILENAME */
 `default_nettype none
 
 // -----------------------------------------------------------------------------
@@ -158,4 +159,5 @@ module butterfly (
 
 endmodule
 
+/* verilator lint_on DECLFILENAME */
 `default_nettype wire

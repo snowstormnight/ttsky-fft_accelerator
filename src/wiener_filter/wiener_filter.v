@@ -1,3 +1,6 @@
+/* verilator lint_off DECLFILENAME */
+/* verilator lint_off WIDTHEXPAND */
+/* verilator lint_off UNUSEDPARAM */
 `timescale 1ns/1ps
 
 // Wiener-only filter generator:
@@ -108,3 +111,7 @@ module FilterGen #(
     end
 
 endmodule
+
+/* verilator lint_on UNUSEDPARAM */
+/* verilator lint_on WIDTHEXPAND */
+/* verilator lint_on DECLFILENAME */

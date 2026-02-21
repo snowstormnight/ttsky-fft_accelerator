@@ -6,7 +6,17 @@ SIM ?= icarus
 FST ?= -fst # Use more efficient FST format
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = project.v complex_mult.sv
+PROJECT_SOURCES = \
+	tt_um_fft_accelerator.v \
+	deblur_accel/deblur.sv \
+	fft/SV_fft2d_core.sv \
+	fft/SV_fft1d_core.sv \
+	fft/SV_fft_controller.sv \
+	fft/SV_butterfly.sv \
+	fft/SV_twiddle_rom.sv \
+	wiener_filter/wiener_filter.v \
+	mult/complex_mult.sv \
+	ifft/ifft_core.sv
 
 ifneq ($(GATES),yes)
 

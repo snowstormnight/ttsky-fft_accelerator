@@ -1,3 +1,5 @@
+/* verilator lint_off WIDTHEXPAND */
+/* verilator lint_off UNUSEDSIGNAL */
 // -----------------------------------------------------------------------------
 // Module: ifft_core
 // -----------------------------------------------------------------------------
@@ -483,3 +485,6 @@ module ifft_core #(
     end
 
 endmodule
+
+/* verilator lint_on UNUSEDSIGNAL */
+/* verilator lint_on WIDTHEXPAND */

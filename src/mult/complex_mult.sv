@@ -1,3 +1,4 @@
+/* verilator lint_off WIDTHEXPAND */
 // complex_mult_elem.sv
 // Element-wise complex multiplier with optional parallel lanes and 0/1 pipeline stage.
 // Intended for frequency-domain multiply: Y(u,v) * G(u,v) across synchronized bin streams.
@@ -202,3 +203,5 @@ module complex_mult #(
   end
 
 endmodule
+
+/* verilator lint_on WIDTHEXPAND */

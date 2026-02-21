@@ -1,3 +1,4 @@
+/* verilator lint_off DECLFILENAME */
 `default_nettype none
 
 // -----------------------------------------------------------------------------
@@ -49,4 +50,5 @@ module twiddle_rom #(
 
 endmodule
 
+/* verilator lint_on DECLFILENAME */
 `default_nettype wire
