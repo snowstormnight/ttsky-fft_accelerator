@@ -125,7 +125,7 @@ module ifft_core #(
             for (b = 0; b < LOGDIM; b++) begin
                 r = (r << 1) | ((value >> b) & 1);
             end
-            return r;
+            bit_reverse_dim = r;
         end
     endfunction
 

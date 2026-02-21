@@ -144,7 +144,7 @@ module deblur #(
             for (b = 0; b < IMG_LOGN; b++) begin
                 r = (r << 1) | ((value >> b) & 1);
             end
-            return r;
+            bitrev_dim = r;
         end
     endfunction
 
