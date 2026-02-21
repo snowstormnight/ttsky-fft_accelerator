@@ -57,7 +57,7 @@ module ifft_core #(
     localparam int CORE_W = DATA_W + LOGN + 2;      // internal growth guard bits
     localparam int MUL_W  = CORE_W + DATA_W;        // v(core) * w(data)
     localparam int LONG_W = MUL_W + 4;
-`ifndef YOSYS
+`ifndef SYNTHESIS
     localparam real PI = 3.14159265358979323846;
 `endif
 
@@ -168,7 +168,7 @@ module ifft_core #(
         end
     endfunction
 
-`ifdef YOSYS
+`ifdef SYNTHESIS
     // Saturate a 32-bit signed value into DATA_W.
     function automatic logic signed [DATA_W-1:0] sat32_to_data(
         input logic signed [31:0] x
@@ -253,15 +253,17 @@ module ifft_core #(
         end
     endfunction
 
-    // Yosys-safe twiddle ROM initialization for DIM=32 (Tiny Tapeout wrapper path).
+    // Synthesis-safe twiddle ROM initialization for DIM=32 (Tiny Tapeout wrapper path).
     integer ti;
     initial begin
-        if (DIM != 32) begin
-            $error("ifft_core YOSYS path currently supports DIM=32 only");
-        end
         for (ti = 0; ti < DIM/2; ti++) begin
-            tw_re[ti] = q15_to_data(tw_re_q15(ti));
-            tw_im[ti] = q15_to_data(tw_im_q15(ti));
+            if (DIM == 32) begin
+                tw_re[ti] = q15_to_data(tw_re_q15(ti));
+                tw_im[ti] = q15_to_data(tw_im_q15(ti));
+            end else begin
+                tw_re[ti] = '0;
+                tw_im[ti] = '0;
+            end
         end
     end
 `else
