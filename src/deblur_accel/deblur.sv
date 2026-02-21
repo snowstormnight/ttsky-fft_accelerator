@@ -7,17 +7,17 @@
 // One IMG_N x IMG_N frame is buffered and processed per run.
 module deblur #(
     // Tile side length.
-    parameter int IMG_N      = 256,
+    parameter int IMG_N      = 4,
     // log2(IMG_N), forwarded to FFT.
-    parameter int FFT_LOGN   = 8,
+    parameter int FFT_LOGN   = 2,
     // Number of parallel 1D FFT lanes in fft2d_core.
-    parameter int FFT_LANES  = 4,
+    parameter int FFT_LANES  = 1,
     // Internal datapath width for filter/mult/IFFT.
-    parameter int DATA_W     = 24,
+    parameter int DATA_W     = 10,
     // Fractional bits for filter/IFFT fixed-point domain.
-    parameter int FRAC_W     = 15,
+    parameter int FRAC_W     = 8,
     // Fractional bits used by complex multiplier normalization.
-    parameter int MULT_FRAC  = 15,
+    parameter int MULT_FRAC  = 8,
     // 1 enables output saturation in complex multiplier.
     parameter int MULT_SAT   = 1,
     // Optional gain shift before IFFT input.

@@ -24,10 +24,24 @@ module twiddle_rom #(
     output logic signed [15:0]      w_re,
     output logic signed [15:0]      w_im
 );
+  logic [4:0] idx5;
+
+  function automatic logic [4:0] idx_to_5(input logic [LOGN-1:0] x);
+    int i;
+    begin
+      idx_to_5 = 5'd0;
+      for (i = 0; i < 5; i++) begin
+        if (i < LOGN) begin
+          idx_to_5[i] = x[i];
+        end
+      end
+    end
+  endfunction
 
   always_comb begin
+    idx5 = idx_to_5(idx);
     // idx selects twiddle k.
-    unique case (idx)
+    unique case (idx5)
       5'd0:  begin w_re = 16'sd32767;  w_im = 16'sd0;      end
       5'd1:  begin w_re = 16'sd32138;  w_im = -16'sd6393;  end
       5'd2:  begin w_re = 16'sd30274;  w_im = -16'sd12540; end

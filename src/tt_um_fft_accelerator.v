@@ -19,7 +19,7 @@ module tt_um_ttsky_deblur_accel (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-  localparam int TT_DATA_W = 12;
+  localparam int TT_DATA_W = 10;
 
   // Tiny Tapeout pin-map for a minimal bring-up interface.
   // Controls:
@@ -30,14 +30,14 @@ module tt_um_ttsky_deblur_accel (
   //   img_re from uio_in (sign-extended 8-bit)
   //   h_re   from ui_in  (sign-extended 8-bit)
   //   h_im   from uio_in (sign-extended 8-bit)
-  //   k_cfg  from {ui_in, uio_in}
+  //   k_cfg  from {ui_in[MSBs], uio_in}
   wire                    img_valid  = ui_in[0];
   wire                    h_valid    = ui_in[1];
   wire                    out_ready  = ui_in[2];
   wire signed [15:0]      img_re     = {{8{uio_in[7]}}, uio_in};
   wire signed [TT_DATA_W-1:0] h_re   = {{(TT_DATA_W-8){ui_in[7]}}, ui_in};
   wire signed [TT_DATA_W-1:0] h_im   = {{(TT_DATA_W-8){uio_in[7]}}, uio_in};
-  wire        [TT_DATA_W-1:0] k_cfg  = {ui_in[7:4], uio_in};
+  wire        [TT_DATA_W-1:0] k_cfg  = {ui_in[7 -: (TT_DATA_W-8)], uio_in};
 
   wire                    img_ready;
   wire                    h_ready;
@@ -65,12 +65,12 @@ module tt_um_ttsky_deblur_accel (
 
   // Reduced configuration for Tiny Tapeout-oriented integration test.
   deblur #(
-      .IMG_N(16),
-      .FFT_LOGN(4),
+      .IMG_N(4),
+      .FFT_LOGN(2),
       .FFT_LANES(1),
       .DATA_W(TT_DATA_W),
-      .FRAC_W(12),
-      .MULT_FRAC(12),
+      .FRAC_W(8),
+      .MULT_FRAC(8),
       .MULT_SAT(1),
       .PRE_IFFT_SHIFT(0),
       .FFT_TO_IFFT_MAP(0)

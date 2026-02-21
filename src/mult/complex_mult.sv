@@ -76,7 +76,7 @@ module complex_mult #(
       end else begin
         if (ROUND) begin
           // symmetric rounding: +0.5 for >=0, -0.5 for <0
-          bias   = $signed(1) <<< (FRAC-1);
+          bias   = $signed({{(ACC_W-1){1'b0}}, 1'b1}) <<< (FRAC-1);
           x_bias = (x_full >= 0) ? (x_full + bias) : (x_full - bias);
         end else begin
           x_bias = x_full;
