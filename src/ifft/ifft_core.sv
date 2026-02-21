@@ -57,8 +57,9 @@ module ifft_core #(
     localparam int CORE_W = DATA_W + LOGN + 2;      // internal growth guard bits
     localparam int MUL_W  = CORE_W + DATA_W;        // v(core) * w(data)
     localparam int LONG_W = MUL_W + 4;
-
+`ifndef YOSYS
     localparam real PI = 3.14159265358979323846;
+`endif
 
     // Synthesis-time parameter checks.
     initial begin
@@ -167,6 +168,103 @@ module ifft_core #(
         end
     endfunction
 
+`ifdef YOSYS
+    // Saturate a 32-bit signed value into DATA_W.
+    function automatic logic signed [DATA_W-1:0] sat32_to_data(
+        input logic signed [31:0] x
+    );
+        logic signed [31:0] max_ext;
+        logic signed [31:0] min_ext;
+        begin
+            max_ext = $signed({{(32-DATA_W){1'b0}}, DATA_MAX});
+            min_ext = $signed({{(32-DATA_W){1'b1}}, DATA_MIN});
+            if (x > max_ext) begin
+                sat32_to_data = DATA_MAX;
+            end else if (x < min_ext) begin
+                sat32_to_data = DATA_MIN;
+            end else begin
+                sat32_to_data = x[DATA_W-1:0];
+            end
+        end
+    endfunction
+
+    // Q1.15 twiddle constants for DIM=32.
+    function automatic logic signed [15:0] tw_re_q15(input int idx);
+        begin
+            case (idx)
+                0:  tw_re_q15 = 16'sd32767;
+                1:  tw_re_q15 = 16'sd32138;
+                2:  tw_re_q15 = 16'sd30274;
+                3:  tw_re_q15 = 16'sd27246;
+                4:  tw_re_q15 = 16'sd23170;
+                5:  tw_re_q15 = 16'sd18205;
+                6:  tw_re_q15 = 16'sd12540;
+                7:  tw_re_q15 = 16'sd6393;
+                8:  tw_re_q15 = 16'sd0;
+                9:  tw_re_q15 = -16'sd6393;
+                10: tw_re_q15 = -16'sd12540;
+                11: tw_re_q15 = -16'sd18205;
+                12: tw_re_q15 = -16'sd23170;
+                13: tw_re_q15 = -16'sd27246;
+                14: tw_re_q15 = -16'sd30274;
+                15: tw_re_q15 = -16'sd32138;
+                default: tw_re_q15 = 16'sd0;
+            endcase
+        end
+    endfunction
+
+    // Positive imaginary sign for inverse FFT twiddles.
+    function automatic logic signed [15:0] tw_im_q15(input int idx);
+        begin
+            case (idx)
+                0:  tw_im_q15 = 16'sd0;
+                1:  tw_im_q15 = 16'sd6393;
+                2:  tw_im_q15 = 16'sd12540;
+                3:  tw_im_q15 = 16'sd18205;
+                4:  tw_im_q15 = 16'sd23170;
+                5:  tw_im_q15 = 16'sd27246;
+                6:  tw_im_q15 = 16'sd30274;
+                7:  tw_im_q15 = 16'sd32138;
+                8:  tw_im_q15 = 16'sd32767;
+                9:  tw_im_q15 = 16'sd32138;
+                10: tw_im_q15 = 16'sd30274;
+                11: tw_im_q15 = 16'sd27246;
+                12: tw_im_q15 = 16'sd23170;
+                13: tw_im_q15 = 16'sd18205;
+                14: tw_im_q15 = 16'sd12540;
+                15: tw_im_q15 = 16'sd6393;
+                default: tw_im_q15 = 16'sd0;
+            endcase
+        end
+    endfunction
+
+    // Convert Q1.15 constants to configured FRAC_W domain.
+    function automatic logic signed [DATA_W-1:0] q15_to_data(
+        input logic signed [15:0] x_q15
+    );
+        logic signed [31:0] x32;
+        begin
+            x32 = $signed({{16{x_q15[15]}}, x_q15});
+            if (FRAC_W >= 15) begin
+                q15_to_data = sat32_to_data(x32 <<< (FRAC_W - 15));
+            end else begin
+                q15_to_data = sat32_to_data(x32 >>> (15 - FRAC_W));
+            end
+        end
+    endfunction
+
+    // Yosys-safe twiddle ROM initialization for DIM=32 (Tiny Tapeout wrapper path).
+    integer ti;
+    initial begin
+        if (DIM != 32) begin
+            $error("ifft_core YOSYS path currently supports DIM=32 only");
+        end
+        for (ti = 0; ti < DIM/2; ti++) begin
+            tw_re[ti] = q15_to_data(tw_re_q15(ti));
+            tw_im[ti] = q15_to_data(tw_im_q15(ti));
+        end
+    end
+`else
     // Quantize real-valued constants (twiddles) into DATA_W fixed-point.
     function automatic logic signed [DATA_W-1:0] quant_real_to_fixed(input real x);
         int tmp;
@@ -182,17 +280,6 @@ module ifft_core #(
         end
     endfunction
 
-    // Final 1/N scaling for IFFT output with saturation to DATA_W.
-    function automatic logic signed [DATA_W-1:0] scale_ifft(
-        input logic signed [CORE_W-1:0] x
-    );
-        logic signed [LONG_W-1:0] shifted;
-        begin
-            shifted    = $signed(x) >>> LOGN; // divide by DIM*DIM (=N)
-            scale_ifft = sat_to_data(shifted);
-        end
-    endfunction
-
     // Twiddle ROM initialization for one DIM-point inverse FFT kernel.
     integer ti;
     real angle;
@@ -203,6 +290,18 @@ module ifft_core #(
             tw_im[ti] = quant_real_to_fixed($sin(angle));
         end
     end
+`endif
+
+    // Final 1/N scaling for IFFT output with saturation to DATA_W.
+    function automatic logic signed [DATA_W-1:0] scale_ifft(
+        input logic signed [CORE_W-1:0] x
+    );
+        logic signed [LONG_W-1:0] shifted;
+        begin
+            shifted    = $signed(x) >>> LOGN; // divide by DIM*DIM (=N)
+            scale_ifft = sat_to_data(shifted);
+        end
+    endfunction
 
     // Streaming interface behavior and output addressing.
     always_comb begin

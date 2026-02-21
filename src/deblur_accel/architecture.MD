@@ -44,7 +44,7 @@ python PY_deblur_pipeline.py \
   --mult-saturate 1 \
   --pre-ifft-shifts 12 \
   --fft-to-ifft-maps 0 \
-  --selection-metric sharpness \
+  --selection-metric rmse \
   --improve-tolerance 0.10
 ```
 

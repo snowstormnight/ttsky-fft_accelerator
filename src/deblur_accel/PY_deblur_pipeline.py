@@ -448,7 +448,7 @@ def main() -> int:
     p.add_argument("--pre-ifft-shifts", type=str, default="12")
     p.add_argument("--fft-to-ifft-maps", type=str, default="0")
     p.add_argument("--improve-tolerance", type=float, default=0.10, help="Count as improved if rmse_deblur <= rmse_blur*(1+tolerance)")
-    p.add_argument("--selection-metric", type=str, choices=["sharpness", "rmse"], default="sharpness", help="How to pick best candidate from PSF/K sweeps")
+    p.add_argument("--selection-metric", type=str, choices=["sharpness", "rmse"], default="rmse", help="How to pick best candidate from PSF/K sweeps")
     args = p.parse_args()
 
     if not is_pow2(args.lanes):
