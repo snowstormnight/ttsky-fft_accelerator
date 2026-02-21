@@ -58,6 +58,7 @@ module deblur #(
     localparam int FFT_W    = 16;
     localparam int FFT_AW   = (TOT <= 1) ? 1 : $clog2(TOT);
     localparam int IMG_LOGN = (IMG_N <= 1) ? 1 : $clog2(IMG_N);
+    typedef logic signed [DATA_W-1:0] data_t;
 
     typedef enum logic [2:0] {
         // Accept/capture image and H in parallel; capture FFT outputs.
@@ -181,6 +182,21 @@ module deblur #(
                 end
             endcase
             fft_raw_to_nat = FFT_AW'(idx_i);
+        end
+    endfunction
+
+    // Convert 16-bit FFT output into configured DATA_W safely.
+    function automatic logic signed [DATA_W-1:0] fft_to_data(
+        input logic signed [FFT_W-1:0] x
+    );
+        begin
+            if (DATA_W >= FFT_W) begin
+                // Signed assignment performs sign-extension when widening.
+                fft_to_data = data_t'(x);
+            end else begin
+                // Narrowing path: arithmetic down-shift before truncation.
+                fft_to_data = data_t'($signed(x) >>> (FFT_W - DATA_W));
+            end
         end
     endfunction
 
@@ -361,8 +377,8 @@ module deblur #(
 
             // Capture FFT frame and reorder indices as configured.
             if (fft_out_valid && fft_out_ready && !fft_loaded) begin
-                y_re_mem[fft_raw_to_nat(y_wr_cnt)] <= $signed({{(DATA_W-FFT_W){fft_out_re[FFT_W-1]}}, fft_out_re});
-                y_im_mem[fft_raw_to_nat(y_wr_cnt)] <= $signed({{(DATA_W-FFT_W){fft_out_im[FFT_W-1]}}, fft_out_im});
+                y_re_mem[fft_raw_to_nat(y_wr_cnt)] <= fft_to_data(fft_out_re);
+                y_im_mem[fft_raw_to_nat(y_wr_cnt)] <= fft_to_data(fft_out_im);
                 if (y_wr_cnt == FFT_AW'(TOT - 1)) begin
                     y_wr_cnt <= y_wr_cnt;
                     fft_loaded <= 1'b1;

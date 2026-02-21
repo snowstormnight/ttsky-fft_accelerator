@@ -24,15 +24,21 @@ Top-level internal module hierarchy:
 
 Current Tiny Tapeout wrapper configuration (inside wrapper):
 
-- `IMG_N = 32`
-- `FFT_LOGN = 5`
+- `IMG_N = 16`
+- `FFT_LOGN = 4`
 - `FFT_LANES = 1`
-- `DATA_W = 16`
+- `DATA_W = 12`
 - `FRAC_W = 12`
 - `MULT_FRAC = 12`
 - `MULT_SAT = 1`
 - `PRE_IFFT_SHIFT = 0`
 - `FFT_TO_IFFT_MAP = 0`
+
+Where to adjust Tiny Tapeout hardening-facing parameters:
+
+- `src/tt_um_fft_accelerator.v`: TT wrapper-side deblur parameters (tile size, datapath width, fractional width, lanes).
+- `info.yaml`: TT project metadata for hardening (`tiles`, `top_module`, `source_files`, pin descriptions).
+- `src/config.json`: OpenLane/LibreLane flow knobs (clock period, placement/routing/timing strategy).
 
 Interface behavior:
 
@@ -51,11 +57,11 @@ Inputs (`ui_in`):
 - `ui_in[0]`: `img_valid`
 - `ui_in[1]`: `h_valid`
 - `ui_in[2]`: `out_ready`
-- `ui_in[7:0]`: also used as signed 8-bit payload for `h_re` (sign-extended to 16-bit) and contributes to `k_cfg`
+- `ui_in[7:0]`: also used as signed 8-bit payload for `h_re` (sign-extended to 12-bit) and contributes to `k_cfg`
 
 Bidir inputs (`uio_in`, configured as input in this wrapper):
 
-- `uio_in[7:0]`: signed 8-bit payload (sign-extended) used for `img_re` and `h_im`, and contributes to `k_cfg`
+- `uio_in[7:0]`: signed 8-bit payload (sign-extended) used for `img_re` and `h_im` (to 12-bit), and contributes to `k_cfg`
 
 Outputs (`uo_out`):
 
@@ -84,6 +90,7 @@ Bidirectional output behavior:
 Notes:
 
 - This wrapper is intentionally IO-limited and uses compact 8-bit payload mapping for bring-up/debug.
+- `k_cfg` is packed as `{ui_in[7:4], uio_in[7:0]}` for a 12-bit Wiener regularization value.
 - Full-resolution frame loading and high-quality result reconstruction are intended in the full Verilator/software flow, while this TT wrapper demonstrates integration and control signaling on TT pins.
 
 ## External hardware
