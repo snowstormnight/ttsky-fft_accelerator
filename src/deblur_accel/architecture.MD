@@ -2,11 +2,23 @@
 
 ## 1) What This Accelerator Does
 
-The accelerator performs frequency-domain deblurring on one square grayscale tile:
+The accelerator is a frequency-domain deblurring pipeline for one square grayscale tile:
 
 `blurred image -> FFT -> Wiener filter generation -> complex multiply -> IFFT -> deblurred image`
 
-In this project flow, Python prepares the input tile and PSF-derived frequency response `H(u,v)`, and hardware (`deblur.sv`) executes the core streaming chain.
+Current hardware chain:
+- `FFT2D` (butterfly datapath + memory + controller) converts pixels to frequency bins `Y(u,v)`.
+- `FilterGen` computes Wiener gain `G(u,v)` from `H(u,v)` and `K`.
+- `complex_mult` applies filtering: `Yf(u,v) = Y(u,v) * G(u,v)`.
+- `IFFT` reconstructs spatial-domain output from `Yf(u,v)`.
+
+Current integration mode:
+- Software provides `H(u,v)` (computed from PSF) and streams it to hardware.
+
+Deployment target:
+- Replace software-provided `H(u,v)` with a precomputed PSF/`H(u,v)` bank (on-chip/off-chip).
+- Select bank entry by control logic (or a lightweight blur estimator).
+- Keep Wiener + multiply + FFT/IFFT pipeline fully hardware-driven during inference.
 
 ## 2) How To Run
 
@@ -18,25 +30,31 @@ python PY_deblur_pipeline.py \
   --images-dir image \
   --outdir results \
   --max-n 256 \
+  --img-n 256 \
+  --fft-logn 8 \
   --lanes 4 \
-  --k-values 1,2,4,8,16,32,64,128,256,512,1024 \
+  --k-values 16,64,256,1024,4096,8192,16384 \
   --h-scale 32767 \
   --psf-kernel 9 \
   --psf-sigma 2.0 \
-  --deblur-psf-sigmas 2.0 \
+  --deblur-psf-sigmas 1.2,1.6,2.0,2.4,2.8,3.2 \
   --data-w 24 \
   --frac-w 15 \
   --mult-frac 15 \
   --mult-saturate 1 \
   --pre-ifft-shifts 12 \
-  --fft-to-ifft-maps 0
+  --fft-to-ifft-maps 0 \
+  --selection-metric sharpness \
+  --improve-tolerance 0.10
 ```
 
 3. Output is written to `src/deblur_accel/results/<image>_N*_L*/`.
 
 ## 2.1) Parameter Explanation
 
-Command-line parameters in `PY_deblur_pipeline.py`:
+Command-line parameters in `PY_deblur_pipeline.py`, grouped by what they control:
+
+### Paths And Files
 
 - `--images-dir`
   - Input folder containing source images.
@@ -46,38 +64,39 @@ Command-line parameters in `PY_deblur_pipeline.py`:
   - Output folder for result case directories.
   - Default: `results`
 
+
+### Image Size / FFT Topology
+
 - `--max-n`
-  - Maximum width of the image by pixel, power-of-two.
-  - The script resizes input to nearest allowed power-of-two up to this limit.
+  - Maximum allowed tile size `N` used by auto-sizing path.
+  - The script chooses a power-of-two size from image dimensions, then clamps by `max-n`.
   - Default: `256`
 
 - `--img-n`
-  - The width of the image in pixel
+  - Directly sets hardware tile size `N` (`IMG_N`).
   - Must be power-of-two and `>= 2`.
   - If provided, this overrides auto-size logic from image dimensions.
   - Default: unset (auto)
 
 - `--fft-logn`
-  - The number of layer needed for doing FFT
+  - Directly sets `FFT_LOGN` (number of radix-2 FFT stages in 1D FFT path).
   - Must satisfy `2^FFT_LOGN == IMG_N`.
   - Default: unset (auto from `IMG_N`)
 
 - `--lanes`
-  - The number of fft compute module will exist for the accelerator
+  - Number of parallel FFT lanes (`FFT_LANES`).
   - Higher lanes can improve throughput at higher area cost.
   - Must be power-of-two and divide selected `N`.
   - Default: `4`
 
-- `--k-values`
-  - Comma-separated Wiener `K` candidates (regularization strength).
-  - Script sweeps these and picks best RMSE.
-  - Larger `K` = more conservative deblurring (less noise amplification).
-  - Default: `1,2,4,8,16,32,64,128,256,512,1024`
+- `--fft-to-ifft-maps`
+  - Comma-separated mapping modes (`FFT_TO_IFFT_MAP` values) from FFT bin order to IFFT feed order.
+  - Usually keep as `0` unless explicitly validating alternate mappings.
+  - Default: `0`
 
-- `--h-scale`
-  - Quantization scale used to convert floating-point `H(u,v)` into fixed-point integers.
-  - Default targets Q1.15-style scaling (`32767`).
-  - Default: `32767`
+---
+
+### Blur / Deblur Model (PSF + Wiener)
 
 - `--psf-kernel`
   - Gaussian kernel size used to synthesize blur PSF.
@@ -94,6 +113,21 @@ Command-line parameters in `PY_deblur_pipeline.py`:
   - Lets deblur model differ from blur model (model-mismatch search).
   - Empty means use only `--psf-sigma`.
   - Default: `1.2,1.6,2.0,2.4,2.8,3.2`
+
+- `--k-values`
+  - Comma-separated Wiener `K` candidates (regularization strength).
+  - Script sweeps these and picks best candidate by `--selection-metric`.
+  - Larger `K` = more conservative deblurring (less noise amplification).
+  - Default: `16,64,256,1024,4096,8192,16384`
+
+- `--h-scale`
+  - Quantization scale used to convert floating-point `H(u,v)` into fixed-point integers.
+  - Default targets Q1.15-style scaling (`32767`).
+  - Default: `32767`
+
+---
+
+### Fixed-Point / Numeric Hardware Format
 
 - `--data-w`
   - Main fixed-point data width (`DATA_W` parameter) for Wiener/mult/IFFT path.
@@ -121,15 +155,9 @@ Command-line parameters in `PY_deblur_pipeline.py`:
   - Larger values increase amplitude but can clip.
   - Default: `12`
 
-- `--fft-to-ifft-maps`
-  - Comma-separated mapping modes (`FFT_TO_IFFT_MAP` values) from FFT bin order to IFFT feed order.
-  - Usually keep as `0` unless explicitly validating alternate mappings.
-  - Default: `0`
+---
 
-- `--improve-tolerance`
-  - Reporting threshold for `IMPROVED` status.
-  - `IMPROVED` if `rmse_deblur <= rmse_blur * (1 + tolerance)`.
-  - Default: `0.10` (10% tolerance)
+### Candidate Selection / Reporting
 
 - `--selection-metric`
   - Candidate-selection rule for PSF/K sweep.
@@ -137,55 +165,117 @@ Command-line parameters in `PY_deblur_pipeline.py`:
   - `rmse`: reference-based selection (only meaningful in synthetic tests where original is known).
   - Default: `sharpness`
 
+- `--improve-tolerance`
+  - Reporting threshold for `IMPROVED` status.
+  - `IMPROVED` if `rmse_deblur <= rmse_blur * (1 + tolerance)`.
+  - Default: `0.10` (10% tolerance)
+
 ## 3) Top-Level Hardware I/O (`deblur.sv`)
 
 Top module: `src/deblur_accel/deblur.sv`
 
-### Clock/Reset
-- `clk`
-- `rst_n`
+Signal-by-signal function:
 
-### Image Stream Input (spatial domain)
-- `img_valid` / `img_ready`
-- `img_re[15:0]` (real grayscale sample in fixed-point)
+- `clk`: Main synchronous clock for all internal blocks (`FFT2D`, `FilterGen`, `complex_mult`, `IFFT`).
+- `rst_n`: Active-low reset; `0` resets FSM/counters/state, `1` enables normal operation.
+- `img_valid`: Upstream says current `img_re` sample is valid.
+- `img_ready`: Deblur top can accept `img_re`; input transfer happens on `img_valid && img_ready`.
+- `img_re[15:0]`: Spatial-domain real input sample (signed fixed-point); expected `IMG_N*IMG_N` samples per frame.
+- `h_valid`: Upstream says current `h_re/h_im` bin is valid.
+- `h_ready`: Deblur top can accept one `H(u,v)` bin; transfer happens on `h_valid && h_ready`.
+- `h_re[DATA_W-1:0]`: Real part of blur transfer bin `H(u,v)` (signed fixed-point).
+- `h_im[DATA_W-1:0]`: Imaginary part of blur transfer bin `H(u,v)` (signed fixed-point).
+- `k_cfg[DATA_W-1:0]`: Wiener regularization constant `K`, used by `FilterGen` in `G(u,v)=conj(H)/( |H|^2 + K )`.
+- `out_valid`: Deblur top says `out_re/out_im` are valid.
+- `out_ready`: Downstream can accept output; output transfer happens on `out_valid && out_ready`.
+- `out_re[DATA_W-1:0]`: Reconstructed spatial-domain real output sample (primary image output).
+- `out_im[DATA_W-1:0]`: Reconstructed spatial-domain imaginary residual (ideally near zero).
+- `out_last`: Asserted on final output sample of the frame.
+- `done`: Top-level frame completion indication.
+- `fft_perf_done`: FFT performance counter ready flag.
+- `fft_perf_cycles[63:0]`: FFT cycle count for the frame.
 
-### Wiener Input Stream (`H(u,v)`)
-- `h_valid` / `h_ready`
-- `h_re[DATA_W-1:0]`, `h_im[DATA_W-1:0]` (complex frequency response bins)
-- `k_cfg[DATA_W-1:0]` (Wiener regularization constant)
+### Expected Stream Order (Current Integration)
 
-### Output Stream (reconstructed spatial domain)
-- `out_valid` / `out_ready`
-- `out_re[DATA_W-1:0]`
-- `out_im[DATA_W-1:0]`
-- `out_last`
-
-### Status
-- `done`
-- `fft_perf_done`
-- `fft_perf_cycles[63:0]`
+1. Feed complete `H` stream: `IMG_N * IMG_N` complex bins (`h_re/h_im`).
+2. Feed complete image stream: `IMG_N * IMG_N` real samples (`img_re`).
+3. Read complete output stream: `IMG_N * IMG_N` complex samples (`out_re/out_im`).
 
 ## 4) Expected I/O Behavior
 
-### Input expectations
-- Image tile is square, power-of-two sized (pipeline currently uses up to `N=256`).
-- `img_*` stream provides exactly `N*N` samples.
-- `h_*` stream provides exactly `N*N` complex bins.
-- Data is fixed-point signed integer format (Q-format controlled by script params).
+Detailed transaction behavior for one frame (`N = IMG_N`, total samples `TOT = N*N`):
 
-### Handshake behavior
-- All streams use valid/ready protocol.
-- A transfer occurs when `valid && ready` on the same cycle.
-- The testbench feeds `H` first, then image samples, then collects `N*N` output samples.
+### Phase 0: Reset / Idle
+- Hold `rst_n = 0` for reset cycles.
+- Drive `rst_n = 1` to start normal operation.
+- Internal state starts at `ST_LOAD_H`.
 
-### Output expectations
-- `out_*` returns `N*N` complex samples corresponding to reconstructed image domain.
-- Main useful content is in `out_re`; `out_im` should stay small (residual numerical error).
-- Python converts reconstructed fixed-point values back to 8-bit grayscale PNG.
+### Phase 1: Load Wiener Model (`H`)  
+Goal: accept exactly `TOT` complex bins.
 
-### Quality behavior
-- Deblur quality depends on PSF model match, `K`, fixed-point widths, and scaling settings.
-- `metrics.txt` records RMSE and selected settings (`best_k`, `best_shift`, map, etc.).
+- Producer drives:
+  - `h_valid = 1`
+  - `h_re`, `h_im` = current `H(u,v)` bin
+- Transfer condition: `h_valid && h_ready`.
+- On each successful handshake, internal `H` write counter increments by 1.
+- Continue until exactly `TOT` handshakes complete.
+- During this phase, image stream is not consumed as the top is in `ST_LOAD_H`.
+
+### Phase 2: Load Blurred Image Samples  
+Goal: accept exactly `TOT` real samples.
+
+- Producer drives:
+  - `img_valid = 1`
+  - `img_re` = current spatial sample
+- Transfer condition: `img_valid && img_ready`.
+- On each successful handshake, internal image input counter increments by 1.
+- Continue until exactly `TOT` handshakes complete.
+- Samples are streamed in row-major frame order from the software testbench.
+
+### Phase 3: Internal Processing  
+Goal: hardware computes frame result.
+
+- Top runs internal chain:
+  - FFT on loaded image
+  - Wiener `G(u,v)` generation from loaded `H` and `k_cfg`
+  - Complex multiply
+  - IFFT reconstruction
+- No extra external data input required in this phase.
+
+### Phase 4: Drain Output Samples  
+Goal: output exactly `TOT` complex reconstructed samples.
+
+- Consumer drives `out_ready` (usually held high by testbench).
+- Top drives:
+  - `out_valid`
+  - `out_re`, `out_im`
+  - `out_last` on final sample
+- Transfer condition: `out_valid && out_ready`.
+- On each successful handshake, output counter increments by 1.
+- After `TOT` successful handshakes:
+  - frame output is complete
+  - `done` asserts for completion indication.
+
+### Handshake Rules (All Streams)
+- A sample/bin is transferred only on the rising clock edge where `valid && ready == 1`.
+- If `valid=1` and `ready=0`, producer must hold the same data stable until accepted.
+- If `ready=1` and `valid=0`, no transfer occurs.
+
+### Data Format Expectations
+- `img_re`: signed fixed-point real sample (input image domain).
+- `h_re/h_im`: signed fixed-point complex frequency response bins.
+- `k_cfg`: fixed-point Wiener regularization constant.
+- `out_re/out_im`: signed fixed-point complex reconstructed output.
+
+### Output Use
+- `out_re` is the primary reconstructed image value.
+- `out_im` is residual imaginary component (should be small in a stable run).
+- Python post-processing converts `out_re` back to 8-bit grayscale for `deblurred.png`.
+
+### Performance / Quality Notes
+- `fft_perf_done` / `fft_perf_cycles` report FFT block cycle count.
+- Deblur quality depends on PSF-model match, `K`, mapping/shift settings, and fixed-point precision.
+- `metrics.txt` records selected settings and quality metrics per frame.
 
 ## 5) Module Hierarchy
 
