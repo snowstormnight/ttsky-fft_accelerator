@@ -1,0 +1,1 @@
+ROOT="$(cd ../.. && pwd -P)" && ln -sfn "$ROOT" /tmp/ttsky_fft_ws && BUILD="/tmp/ttsky_build" && mkdir -p "$BUILD" && cd /tmp/ttsky_fft_ws/src/mult && verilator -Wall --cc complex_mult.sv --top-module complex_mult --exe /tmp/ttsky_fft_ws/src/mult/CPP_complex_mult_tb.cpp --build -j 0 -CFLAGS "-std=c++17" -Mdir "$BUILD/complex_mult" && "$BUILD/complex_mult/Vcomplex_mult"

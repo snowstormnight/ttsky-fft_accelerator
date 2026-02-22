@@ -1,0 +1,1 @@
+ROOT="$(cd ../.. && pwd -P)" && ln -sfn "$ROOT" /tmp/ttsky_fft_ws && BUILD="/tmp/ttsky_build" && mkdir -p "$BUILD" && cd /tmp/ttsky_fft_ws/src/wiener_filter && verilator -Wall --cc wiener_filter.v --top-module FilterGen --exe /tmp/ttsky_fft_ws/src/wiener_filter/CPP_FilterGen_tb.cpp --build -j 0 -CFLAGS "-std=c++17" -Mdir "$BUILD/filtergen" && "$BUILD/filtergen/VFilterGen"

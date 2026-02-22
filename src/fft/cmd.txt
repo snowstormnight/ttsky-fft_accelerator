@@ -1,4 +1,1 @@
-cd ~/project/ASIC_Hack/src/fft
-
-mkdir -p image
-python PY_test_image_generation.py --images-dir image --outdir results --order bitrev2d --max-n 256 --lanes 4
+ROOT="$(cd ../.. && pwd -P)" && ln -sfn "$ROOT" /tmp/ttsky_fft_ws && BUILD="/tmp/ttsky_build" && mkdir -p "$BUILD" && cd /tmp/ttsky_fft_ws/src/fft && verilator -Wall --cc SV_butterfly.sv --top-module butterfly --exe /tmp/ttsky_fft_ws/src/fft/CPP_butterfly_tb.cpp --build -j 0 -CFLAGS "-std=c++17" -Mdir "$BUILD/fft_butterfly" && "$BUILD/fft_butterfly/Vbutterfly" && verilator -Wall --cc SV_fft1d_core.sv SV_fft_controller.sv SV_butterfly.sv SV_twiddle_rom.sv --top-module fft1d_core --exe /tmp/ttsky_fft_ws/src/fft/CPP_fft1d_tb.cpp --build -j 0 -CFLAGS "-std=c++17" -Mdir "$BUILD/fft1d" && "$BUILD/fft1d/Vfft1d_core" && verilator -Wall --cc SV_fft2d_core.sv SV_fft1d_core.sv SV_fft_controller.sv SV_butterfly.sv SV_twiddle_rom.sv --top-module fft2d_core --exe /tmp/ttsky_fft_ws/src/fft/CPP_2d_fft_tb.cpp --build -j 0 -CFLAGS "-std=c++17" -Mdir "$BUILD/fft2d" && "$BUILD/fft2d/Vfft2d_core"
